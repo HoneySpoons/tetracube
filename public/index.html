@@ -93,6 +93,12 @@
     color: var(--glow, #fff); opacity: 0; white-space: nowrap; letter-spacing: 3px;
     text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; }
   #pop.go { animation: pop 1.2s steps(1, end) forwards, blink .12s steps(2, start) 6; }
+  #pop.cube { font-size: min(52px, 9.5vw); letter-spacing: 2px;            /* TETRACUBE!, and nothing else */
+    animation: cubePop 2.2s steps(1, end) forwards, cubeHue .5s steps(4, end) 4; }
+  @keyframes cubePop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(2.2); } 6% { transform: translate(-50%,-50%) scale(1); }
+    12% { transform: translate(-50%,-50%) scale(1.15); } 18% { transform: translate(-50%,-50%) scale(1); }
+    85% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
+  @keyframes cubeHue { to { filter: hue-rotate(360deg); } }
   @keyframes pop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(1.4); } 8% { transform: translate(-50%,-50%) scale(1); }
     80% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
   @keyframes blink { to { color: #fff; } }
@@ -239,6 +245,7 @@ let grid, actives, bags, lastDrop, active, score, lines, live, paused, over, fla
 // A run is ranked LIVE only if live mode was on before the first lock and never turned off.
 let locks = 0, rankedLive = false, runStart = 0;
 let armed = false;          // the pause menu's RESTART takes two taps; this is the first
+let streak = [], cubes = 0; // faces in the current TETRA streak, in order; TETRACUBEs this run
 const runMode = () => rankedLive ? 'live' : 'focus';
 
 function reset() {
@@ -248,7 +255,7 @@ function reset() {
   bags = [[], [], [], []];
   lastDrop = [0, 0, 0, 0];
   active = 0; score = 0; lines = 0; live = false; paused = false; over = false; flash = ''; newHi = false;
-  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; renderOverlay();
+  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; streak = []; cubes = 0; renderOverlay();
   for (let f = 0; f < 4; f++) spawn(f);
   setActive(0, true);
 }
@@ -308,18 +315,39 @@ function lock(f) {
   spawn(f);
 }
 
+// TETRA: one face clears four or more rows in a single wave.
+// TETRACUBE: four TETRAs back to back, each on a different face, with no other clear in between.
+// Waves are judged one at a time, in order; the clears inside one wave happen together:
+//  1. any face clearing 1–3 rows in the wave breaks the streak (empties it) before this wave's TETRAs count;
+//  2. each TETRA in the wave, by face index: on a face not yet in the streak it extends it; on a face
+//     already in it, the streak breaks and this TETRA starts a new one;
+//  3. the fourth distinct face makes a TETRACUBE: the bonus is added, the moment plays, the streak empties.
+// A cascade wave counts like any other: a TETRA that falls out of a cascade extends the streak, and a
+// cascade that clears 1–3 rows breaks it. Pieces that lock without a clear leave the streak alone.
+// Focus and Live alike. The bonus is four TETRAs' worth at the current level.
+const TETRA = 4, CUBE_BONUS = 4 * 800;
+function tetraStreak(perFace) {
+  if (perFace.some(k => k > 0 && k < TETRA)) streak = [];
+  for (let g = 0; g < 4; g++) {
+    if (perFace[g] < TETRA) continue;
+    streak = streak.includes(g) ? [g] : [...streak, g];
+    if (streak.length === 4) { streak = []; cubes++; score += CUBE_BONUS * level(); fx.cube(); }
+  }
+}
+
 // A full row on one face removes its W cells — including the two corner cells,
 // which belong to the neighbouring faces too. Their columns drop, which can
 // complete *their* rows. Repeat until nothing clears: that's a cascade.
 function clearRows() {
   for (let wave = 0; ; wave++) {
     const remove = new Map();                       // column → Map(row → face that cleared it)
+    const perFace = [0, 0, 0, 0];
     let n = 0;
     for (let g = 0; g < 4; g++) for (let r = 0; r < HT; r++) {
       let full = true;
       for (let j = 0; j < W && full; j++) if (!grid[ringCol(g, j)][r]) full = false;
       if (!full) continue;
-      n++;
+      n++; perFace[g]++;
       for (let j = 0; j < W; j++) {
         const c = ringCol(g, j);
         if (!remove.has(c)) remove.set(c, new Map());
@@ -336,8 +364,9 @@ function clearRows() {
     lines += n;
     const base = [0, 100, 300, 500, 800][Math.min(n, 4)] + Math.max(0, n - 4) * 400;
     score += base * level() * (wave + 1);
-    fx.clear(gone, wave, n);
+    fx.clear(gone, wave, n, perFace.some(k => k >= TETRA));
     if (level() > lvBefore) fx.levelUp();
+    tetraStreak(perFace);
     for (let g = 0; g < 4; g++) {                    // a shifted corner may now sit inside a falling piece
       const p = actives[g];
       while (p && collides(g, cellsOf(p)) && p.y < HT) p.y++;
@@ -356,7 +385,7 @@ function gameOver() {
   fx.over();
   if (score <= 0) { ov = { kind: 'over', stage: 'board', mode: runMode(), board: null }; renderOverlay(); return; }
   const mine = ov = {
-    kind: 'over', stage: 'loading', mode: runMode(), board: null, rank: null, err: '',
+    kind: 'over', stage: 'loading', mode: runMode(), board: null, rank: null, err: '', top: false, cube: cubes > 0,
     initials: (localStorage.getItem('tetracube.initials') || 'AAA').split(''), cursor: 0,
     run: { score, lines, level: level(), mode: runMode(), durationMs: Math.round(performance.now() - runStart) },
   };
@@ -364,9 +393,10 @@ function gameOver() {
   fetchBoard(mine.mode).then(b => {
     if (ov !== mine) return;
     mine.board = b;
-    mine.stage = (b.length < 10 || score > b[b.length - 1].score) ? 'entry' : 'board';
+    mine.top = b.length < 10 || score > b[b.length - 1].score;
+    mine.stage = mine.top || mine.cube ? 'entry' : 'board';     // one initials entry covers the board and the hall of fame
     renderOverlay();
-  }).catch(() => { if (ov === mine) { mine.stage = 'offline'; renderOverlay(); } });
+  }).catch(() => { if (ov === mine) { mine.stage = mine.cube ? 'entry' : 'offline'; renderOverlay(); } });
 }
 
 // ── Input ────────────────────────────────────────────────────────────────────
@@ -593,7 +623,7 @@ function drawTower() {
 }
 
 // turn the tower so the chosen face is front-left; its right neighbour is front-right
-let rotTarget = 0, rotVel = 0, faceFlash = 0;
+let rotTarget = 0, rotSpring = 0, rotVel = 0, faceFlash = 0;   // rotSpring chases rotTarget
 function setActive(f, snap = false) {
   active = f;
   lastDrop[f] = performance.now();
@@ -601,7 +631,7 @@ function setActive(f, snap = false) {
   let d = want - rotTarget;
   d = Math.atan2(Math.sin(d), Math.cos(d));
   rotTarget += d;
-  if (snap) { tower.rotation.y = rotTarget; rotVel = 0; }
+  if (snap) { tower.rotation.y = rotSpring = rotTarget; rotVel = 0; }
   else if (d) { sfx.swoosh(d); faceFlash = 1; }
 }
 
@@ -683,6 +713,13 @@ const sfx = (() => {
       if (wave) tone(st(base, 24), 0.6, 'sine', 0.06, st(base, 36), 0.12);
     },
     level() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(st(392, s), 0.15, 'square', 0.045, null, i * 0.06)); },
+    // TETRACUBE!: four rising square arpeggios, one per face a fourth apart, then a detuned sawtooth
+    // chord that swells and climbs over a noise riser. Nothing else in the game uses saw chords or a riser.
+    cube() {
+      for (let f = 0; f < 4; f++) [0, 4, 7, 12].forEach((n, i) => tone(st(261.63, 5 * f + n), 0.12, 'square', 0.05, null, f * 0.16 + i * 0.035));
+      noise(0.7, 0.18, 300, 9000, 0, 0.9);
+      [0, 4, 7, 12, 16, 19].forEach(n => { tone(st(523.25, n), 1.3, 'sawtooth', 0.035, st(523.25, n + 12), 0.68); tone(st(523.25, n) * 1.006, 1.3, 'sawtooth', 0.03, null, 0.68); });
+    },
     over() { tone(440, 1.5, 'sawtooth', 0.12, 38); noise(1.3, 0.3, 900, 60, 0.1, 0.6); },
   };
 })();
@@ -720,16 +757,18 @@ function addGlow(x, y, z, color, life, gain, s0 = 1, grow = 0.6) {
   glows.push({ x, y, z, color, life, gain, s0, grow, age: 0 });
 }
 const pop = document.getElementById('pop');
+let cubeAt = -1e9;                                   // when the last TETRACUBE! started; the moment runs CUBE_MS
+const CUBE_MS = 2200;
 function banner(text, wave = 0, color = FACE_COLORS[active]) {
-  if (!text) return;
+  if (!text || performance.now() - cubeAt < CUBE_MS) return;   // nothing talks over TETRACUBE!
   pop.textContent = text;
   pop.style.fontSize = (22 + wave * 8) + 'px';
   pop.style.setProperty('--glow', hex(color));
-  pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go');
+  pop.classList.remove('go', 'cube'); void pop.offsetWidth; pop.classList.add('go');
 }
 
 const fx = {
-  clear(gone, wave, n) {
+  clear(gone, wave, n, tetra) {
     for (const { c, r, g, type } of gone) {
       const [x, y, z] = cellPos(c, r), [nx, , nz] = NORMALS[g], color = PIECE_COLORS[type] ?? 0xffffff;
       addGlow(x, y, z, 0xffffff, 0.35, 1, 1, 0.7);
@@ -741,7 +780,7 @@ const fx = {
     shake = Math.min(1.4, shake + 0.25 + 0.15 * n + 0.4 * wave);
     if (wave) edgeGlow = 1;
     sfx.clear(n, wave);
-    banner(wave ? `CASCADE ×${wave + 1}` : n >= 4 ? 'QUAD!' : n >= 2 ? `${n} ROWS` : '', wave);
+    banner(wave ? `CASCADE ×${wave + 1}` : tetra ? 'TETRA!' : n >= 2 ? `${n} ROWS` : '', wave);
   },
   lock(f, p) {
     const now = performance.now();
@@ -766,6 +805,24 @@ const fx = {
     });
     sfx.hard();
     shake = Math.min(1.4, shake + 0.35);
+  },
+  // TETRACUBE!: the tower spins once, each face flashes its colour in turn, sparks fly off all four
+  // corner edges, a rainbow banner. Nothing pauses and no input is blocked; the spin is view-only.
+  cube() {
+    cubeAt = performance.now();
+    pop.innerHTML = [...'TETRACUBE!'].map((ch, i) => `<span style="color:${hex(Object.values(PIECE_COLORS)[i % 7])}">${ch}</span>`).join('');
+    pop.style.fontSize = ''; pop.style.setProperty('--glow', '#fff');
+    pop.classList.remove('go', 'cube'); void pop.offsetWidth; pop.classList.add('cube');
+    for (const [k, [x, z]] of [[1, 1], [1, -1], [-1, -1], [-1, 1]].entries()) {
+      const cx = x * W / 2, cz = z * W / 2;
+      for (let r = 0; r < H; r += 0.5) {
+        const color = FACE_COLORS[(k + Math.floor(r)) % 4];
+        addPart(cx, Y0 + r, cz, x * (4 + Math.random() * 8), 4 + Math.random() * 10, z * (4 + Math.random() * 8), color, 1.4 + Math.random());
+        if (r % 2 === 0) addGlow(cx, Y0 + r, cz, color, 0.6, 1, 1.2, 1.2);
+      }
+    }
+    shake = 1.4; edgeGlow = 1;
+    sfx.cube();
   },
   levelUp() { sfx.level(); bgPulse = 1; setTimeout(() => banner(`LEVEL ${level()}`, 1, 0xffffff), 450); },
   over() {
@@ -881,7 +938,7 @@ function drawHud() {
 
 // ── Leaderboard ──────────────────────────────────────────────────────────────
 const COFFEE_URL = 'https://buymeacoffee.com/HoneySpoons';
-const API = '/api/scores', ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const API = '/api/scores', CUBE_API = '/api/cube', ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 let ov = null;   // overlay: null | { kind: 'over', stage } | { kind: 'boards' }
 async function fetchBoard(mode, limit = 10) {
   const r = await fetch(`${API}?mode=${mode}&limit=${limit}`);
@@ -904,16 +961,23 @@ function entryKey(key) {
 async function submit(o) {
   o.stage = 'sending'; o.err = ''; renderOverlay();
   const initials = o.initials.join('');
+  // Each post settles on its own and never throws: a hall-of-fame failure (offline, 500, blocked)
+  // can't take the score down with it, and the other way round.
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    .then(async r => ({ r, body: await r.json().catch(() => ({})) }), () => ({ r: { ok: false, status: 0 }, body: {} }));
   try {
-    const r = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initials, ...o.run }) });
-    const body = await r.json().catch(() => ({}));
+    const [s, c] = await Promise.all([o.top ? post(API, { initials, ...o.run }) : null, o.cube ? post(CUBE_API, { initials, ...o.run }) : null]);
     if (ov !== o) return;
-    if (r.status === 400 && body.error === 'initials') { o.stage = 'entry'; o.err = 'PICK OTHER INITIALS'; renderOverlay(); return; }
-    if (!r.ok) { o.stage = 'offline'; o.err = r.status === 429 ? 'TOO MANY SCORES — TRY LATER' : 'SCORE REJECTED'; renderOverlay(); return; }
+    // both endpoints share one initials filter, so they refuse the same initials together
+    if ([s, c].some(x => x && x.r.status === 400 && x.body.error === 'initials')) { o.stage = 'entry'; o.err = 'PICK OTHER INITIALS'; renderOverlay(); return; }
     localStorage.setItem('tetracube.initials', initials);
-    o.rank = body.rank; o.mine = { initials, score: o.run.score };
-    o.board = await fetchBoard(o.mode);
-    if (ov !== o) return;
+    if (c) { if (c.r.ok) o.place = c.body.place; else o.cubeErr = c.r.status === 429 ? 'HALL OF FAME BUSY — TRY LATER' : 'HALL OF FAME SAID NO'; }
+    if (s && !s.r.ok) { o.stage = 'offline'; o.err = s.r.status === 429 ? 'TOO MANY SCORES — TRY LATER' : 'SCORE REJECTED'; renderOverlay(); return; }
+    if (s) {
+      o.rank = s.body.rank; o.mine = { initials, score: o.run.score };
+      o.board = await fetchBoard(o.mode).catch(() => o.board);   // the score is saved; a failed refresh keeps the old board
+      if (ov !== o) return;
+    }
     o.stage = 'board'; sfx.level(); renderOverlay();
   } catch { if (ov === o) { o.stage = 'offline'; renderOverlay(); } }
 }
@@ -930,6 +994,7 @@ function toggleBoards() {
     .then(([f, l]) => { if (ov === mine) { mine.focus = f; mine.live = l; renderOverlay(); } })
     .catch(() => { if (ov === mine) { mine.err = true; renderOverlay(); } });
 }
+const rainbow = t => [...t].map((ch, i) => ch === ' ' ? ' ' : `<span style="color:${hex(Object.values(PIECE_COLORS)[i % 7])}">${ch}</span>`).join('');
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 function boardHtml(list, mine) {
   if (!list) return '<p style="color:var(--dim)">LOADING…</p>';
@@ -986,9 +1051,12 @@ function drawOverlay() {
   const head = `<h1>GAME OVER</h1><p>SCORE ${pad(score, 6)} &nbsp; LINES ${pad(lines, 3)}</p>` +
     (newHi ? `<p style="color:#ffd60a">NEW PERSONAL BEST!</p>` : '');
   let body = '';
+  const hof = o.place ? `<p style="margin-top:14px">${rainbow(`TETRACUBE HALL OF FAME #${o.place}`)}</p>`
+    : o.cubeErr ? `<p style="color:#ff4d6d;margin-top:14px">${o.cubeErr}</p>` : '';
   if (o.stage === 'loading' || o.stage === 'sending') body = `<p style="color:var(--dim)">${o.stage === 'loading' ? 'CHECKING THE BOARD…' : 'SENDING…'}</p>`;
   else if (o.stage === 'entry') body =
-    `<p style="color:#ffd60a;margin-top:16px">YOU MADE THE ${o.mode.toUpperCase()} TOP 10!</p><p>ENTER YOUR INITIALS</p>` +
+    (o.cube ? `<p style="margin-top:16px">${rainbow('YOU BUILT A TETRACUBE!')}</p><p style="color:var(--dim)">SIGN THE HALL OF FAME</p>` : '') +
+    (o.top ? `<p style="color:#ffd60a;margin-top:16px">YOU MADE THE ${o.mode.toUpperCase()} TOP 10!</p>` : '') + `<p>ENTER YOUR INITIALS</p>` +
     `<div class="initials">${o.initials.map((ch, i) =>
       `<div class="ini"><button class="btn tch" data-act="up" data-i="${i}">&#9650;</button>` +
       `<span class="${i === o.cursor ? 'cur' : ''}">${esc(ch)}</span>` +
@@ -996,9 +1064,9 @@ function drawOverlay() {
     (o.err ? `<p style="color:#ff4d6d">${o.err}</p>` : '') +
     `<div class="btns"><button class="btn go" data-act="save">SAVE</button><button class="btn" data-act="skip">SKIP</button></div>` +
     `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
-  else if (o.stage === 'offline') body = `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>`;
-  else if (!o.board) body = `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
-  else body = `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
+  else if (o.stage === 'offline') body = hof + `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>`;
+  else if (!o.board) body = hof + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
+  else body = hof + `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
     (o.board ? boardHtml(o.board, o.mine) : '') + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
   msg.innerHTML = `<div class="panel">${head}${body}</div>`;
 }
@@ -1014,8 +1082,11 @@ function frame(now) {
       if (now - lastDrop[f] >= iv) { lastDrop[f] = now; if (!tryMove(f, 0, -1)) lock(f); }
     }
   }
-  rotVel += ((rotTarget - tower.rotation.y) * 190 - rotVel * 21) * dt;   // a little overshoot
-  tower.rotation.y += rotVel * dt;
+  rotVel += ((rotSpring - rotTarget) * -190 - rotVel * 21) * dt;         // a little overshoot
+  rotSpring += rotVel * dt;
+  const ct = (now - cubeAt) / CUBE_MS;                                   // TETRACUBE!: one extra turn, eased, view only
+  const spin = ct >= 0 && ct < 0.6 ? 2 * Math.PI * (1 - Math.pow(1 - ct / 0.6, 3)) : 0;
+  tower.rotation.y = rotSpring + spin;
   faceFlash = Math.max(0, faceFlash - dt * 2.5);
   edgeGlow = Math.max(0, edgeGlow - dt * 1.2);
   shake = Math.max(0, shake - dt * 3);
@@ -1024,6 +1095,11 @@ function frame(now) {
   scene.background.setHex(0x0b0e14).lerp(col.setHex(FACE_COLORS[active]), 0.18 * bgPulse);
   fx.update(dt);
   drawTower();
+  if (ct >= 0 && ct < 1) {                                               // the faces flash in turn, twice round
+    const k = Math.floor(ct * 8) % 4;
+    scene.background.lerp(col.setHex(FACE_COLORS[k]), 0.3 * (1 - ct));
+    faceLines[k].material.opacity = 1;
+  }
   drawNet();
   drawHud();
   renderer.render(scene, camera);
@@ -1037,7 +1113,11 @@ window.__booted = true;
 document.getElementById('bootfail')?.remove();   // a slow load can finish after the 8 s message
 // test hook, local dev only
 if (['127.0.0.1', 'localhost'].includes(location.hostname))
-  window.__tc = { get grid() { return grid; }, get actives() { return actives; }, get active() { return active; }, ringCol, clearRows, W, H, S, RING };
+  window.__tc = { get grid() { return grid; }, get actives() { return actives; }, get active() { return active; }, ringCol, clearRows, W, H, S, RING,
+    get streak() { return [...streak]; }, get cubes() { return cubes; }, get score() { return score; }, get lines() { return lines; },
+    // fill the empty cells of face f's bottom n rows and clear: rows(f, 4) is a TETRA on f, rows(f, 1..3) breaks the streak
+    rows(f, n) { for (let r = 0; r < n; r++) for (let j = 0; j < W; j++) grid[ringCol(f, j)][r] ??= 'I'; clearRows(); return [...streak]; },
+    tetra(f) { return this.rows(f, 4); } };
 </script>
 </body>
 </html>

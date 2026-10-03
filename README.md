@@ -24,7 +24,8 @@ In **focus** mode only the face you're on falls. In **live** mode all four fall,
 - `public/index.html`: the game (Three.js, synthesized sound, keyboard + touch)
 - `public/scores.html`: the live leaderboard (`/scores`)
 - `functions/api/scores.js`: `GET`/`POST /api/scores` (Cloudflare Pages Function)
-- `schema.sql`: the D1 table
+- `lib/api.js`: the request guards the API functions share (JSON only, same-site, size cap, initials filter, plausibility, rate-limit hash)
+- `schema.sql`: the D1 tables; `migrations/`: changes to run once on production
 
 ## Run locally
 
@@ -35,6 +36,12 @@ In **focus** mode only the face you're on falls. In **live** mode all four fall,
 ## Deploy
 
     npm run deploy        # Cloudflare Pages project "tetracube", D1 database "tetracube"
+
+Each file in `migrations/` runs once against production, before the deploy that needs it:
+
+    npx wrangler d1 execute tetracube --remote --file=migrations/0001-cube-hof.sql
+
+`schema.sql` holds every table, for a fresh database (`npm run db:local`).
 
 `IP_SALT` is a Pages secret (`wrangler pages secret put IP_SALT --project-name tetracube`).
 The API stores a salted hash of the client address for rate limiting, never the address.

@@ -51,6 +51,9 @@
   .btn { display: inline-block; margin-top: 30px; color: #38e07b; border: 3px solid #38e07b; padding: 12px 16px 10px;
     text-decoration: none; background: #000; box-shadow: 4px 4px 0 #1d5c37; }
   .btn:hover { background: #38e07b; color: #000; }
+  #hof { margin-top: 34px; display: flex; justify-content: center; }
+  #hof[hidden] { display: none; }
+  #hof .panel { min-width: 300px; }
   footer { max-width: 860px; margin: 0 auto; padding: 0 14px 34px; text-align: center; color: var(--dim); font-size: 9px; line-height: 2.4; }
   footer a { color: var(--ink); text-decoration: none; margin: 0 6px; white-space: nowrap; } footer a:hover { color: #ffd60a; }
   @media (max-width: 560px) { h1 { font-size: 22px; } .panel { min-width: 0; width: 100%; box-sizing: border-box; } td { padding: 4px 6px; } }
@@ -65,6 +68,7 @@
     <div class="panel"><span class="t" style="color:#38e07b">FOCUS</span><div id="focus"></div></div>
     <div class="panel"><span class="t" style="color:#ff4d6d">LIVE</span><div id="live"></div></div>
   </div>
+  <div id="hof" hidden><div class="panel"><span class="t" id="hof-t"></span><div id="hof-list"></div></div></div>
   <a class="btn" href="/">PLAY &#9654;</a>
 </main>
 <footer>
@@ -105,7 +109,23 @@ async function refresh() {
     document.getElementById('upd').textContent = 'SCOREBOARD OFFLINE — RETRYING';
   }
 }
-refresh();
+// The hall of fame: everyone who has built a TETRACUBE, in the order they did it. Shown only once it has
+// someone in it; until then this page doesn't mention it.
+document.getElementById('hof-t').innerHTML = [...'TETRACUBE'].map((c, i) => `<span style="color:${COLORS[i % 7]}">${c}</span>`).join('');
+async function refreshHof() {
+  try {
+    const r = await fetch('/api/cube');
+    if (!r.ok) return;
+    const { entries } = await r.json();
+    if (!entries.length) return;
+    document.getElementById('hof-list').innerHTML = `<table><tr class="h"><td>NO</td><td>NAME</td><td>DATE</td></tr>` +
+      entries.map((e, i) => `<tr${i === 0 ? ' class="first"' : ''}><td>${pad(i + 1, 2)}</td><td>${esc(e.initials)}</td><td>${esc(String(e.created_at).slice(0, 10))}</td></tr>`).join('') +
+      `</table>`;
+    document.getElementById('hof').hidden = false;
+  } catch {}
+}
+refresh(); refreshHof();
+setInterval(() => { if (!document.hidden) refreshHof(); }, 30000);
 setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 </script>
