@@ -69,14 +69,15 @@
   .ini .btn { margin: 0; padding: 6px 12px 4px; font-size: 10px; box-shadow: none; }
   body.touch .kbd { display: none; }
   body:not(.touch) .tch { display: none; }
-  #touchbar { display: none; position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom));
-    justify-content: center; gap: 8px; z-index: 8; }
+  #touchbar { display: none; position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 0 calc(12px + env(safe-area-inset-left)) 0 calc(12px + env(safe-area-inset-right)); pointer-events: none;
+    justify-content: space-between; z-index: 8; }
+  #touchbar button { pointer-events: auto; }
   body.touch #touchbar { display: flex; }
-  body.touch #net { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  body.touch #net { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  #net { cursor: pointer; transform: translateX(-50%) scale(var(--ns, 1)); transform-origin: bottom center; }
   #touchbar button { font: inherit; font-size: 9px; min-width: 50px; height: 52px; background: #000; color: #fff;
     border: 3px solid #555a70; touch-action: manipulation; }
-  #touchbar button.face { border-color: var(--fc); color: var(--fc); font-size: 12px; }
-  #touchbar button.face.on { background: var(--fc); color: #000; }
   #touchbar button.on#tb-live { background: #ff4d6d; border-color: #ff4d6d; color: #000; }
   @media (min-width: 761px) and (max-height: 760px) {
     #hud { top: 70px; }
@@ -84,7 +85,7 @@
     #hud .panel .v { font-size: 12px; }
     #title { font-size: 24px; top: 14px; }
   }
-  @media (max-width: 760px) {
+  @media (max-width: 760px), (pointer: coarse) and (max-width: 1180px) {
     #title { font-size: 17px; top: calc(10px + env(safe-area-inset-top)); letter-spacing: 2px; }
     #hud { top: calc(40px + env(safe-area-inset-top)); left: 8px; right: 8px; width: auto; display: flex; gap: 7px; }
     #hud .panel { flex: 1; margin: 0; padding: 12px 5px 4px; border-width: 2px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #3b3f55; }
@@ -93,11 +94,22 @@
     #hud .p-top, #hud .p-mode { display: none; }
     #next { width: 40px; height: 25px; margin-top: 0; }
     #menu { display: none; }
-    #net { bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%) scale(.62); transform-origin: bottom center; }
     #msg .panel { padding: 20px 14px 16px; min-width: 0; font-size: 9px; }
     #msg h1 { font-size: 17px; }
     table.board td { padding: 3px 5px; }
     .boards { flex-direction: column; gap: 6px; }
+  }
+  /* folds open (≈ 7.6–8", near-square) and small tablets: same layout, sized up */
+  @media (pointer: coarse) and (min-width: 600px) and (max-width: 1180px) {
+    #title { font-size: 26px; top: calc(16px + env(safe-area-inset-top)); }
+    #hud { top: calc(64px + env(safe-area-inset-top)); left: 24px; right: 24px; gap: 16px; }
+    #hud .panel { padding: 16px 10px 8px; border-width: 3px; }
+    #hud .panel > .t { font-size: 9px; top: -9px; }
+    #hud .panel .v { font-size: 15px; }
+    #hud .p-top { display: block; }
+    #next { width: 64px; height: 40px; }
+    #touchbar button { min-width: 72px; height: 64px; font-size: 11px; }
+    .boards { flex-direction: row; }
   }
   table.board { border-collapse: collapse; margin: 8px auto 4px; }
   table.board td { padding: 4px 9px; text-align: right; }
@@ -135,10 +147,6 @@
 <input id="keytrap" aria-hidden="true" tabindex="-1" autocomplete="off" style="position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;border:0;padding:0">
 <div id="touchbar">
   <button data-act="live" id="tb-live">LIVE</button>
-  <button data-act="face" data-f="0" class="face" style="--fc:#4cc9f0">A</button>
-  <button data-act="face" data-f="1" class="face" style="--fc:#f72585">S</button>
-  <button data-act="face" data-f="2" class="face" style="--fc:#90be6d">D</button>
-  <button data-act="face" data-f="3" class="face" style="--fc:#f9c74f">F</button>
   <button data-act="pause">II</button>
 </div>
 
@@ -372,7 +380,7 @@ let tp = null;
 const STEP = () => Math.max(22, Math.min(40, innerWidth / 14));
 addEventListener('pointerdown', e => {
   sfx.init();
-  if (e.pointerType === 'mouse' || (e.target instanceof Element && e.target.closest('button, a, #msg .panel'))) return;
+  if (e.pointerType === 'mouse' || (e.target instanceof Element && e.target.closest('button, a, #msg .panel, #net'))) return;
   tp = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, t0: performance.now(), moved: false };
 });
 addEventListener('pointermove', e => {
@@ -400,6 +408,13 @@ addEventListener('pointercancel', () => { tp = null; });
 
 // every on-screen button routes through here
 addEventListener('click', e => {
+  if (e.target === net) {                      // the net is the face picker: tap a board
+    const r = net.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * (4 * W * CELL + 3 * GAP);
+    const f = Math.max(0, Math.min(3, Math.floor((x + GAP / 2) / (W * CELL + GAP))));
+    sfx.init();
+    if (playable() && f !== active) setActive(f);
+    return;
+  }
   const b = e.target instanceof Element && e.target.closest('[data-act]'); if (!b) return;
   sfx.init();
   const act = b.dataset.act, i = +b.dataset.i;
@@ -526,16 +541,35 @@ function setActive(f, snap = false) {
   else if (d) { sfx.swoosh(d); faceFlash = 1; }
 }
 
+const isCompact = () => innerWidth <= 760 || (matchMedia('(pointer: coarse)').matches && innerWidth <= 1180);
 function resize() {
   renderer.setSize(innerWidth, innerHeight);
-  const a = innerWidth / innerHeight, phone = innerWidth <= 760;
-  const room = innerWidth / 2 - 250;                       // px between centre and the HUD column
-  const half = phone ? Math.max(17.5, 9 / a) : Math.max(17.5, room > 0 ? 7.8 * innerHeight / (2 * room) : 40);
-  tower.position.y = phone ? 4.5 : 1.5;
+  const a = innerWidth / innerHeight;
+  // the net: as large as fits between the corner buttons, never larger than 1:1
+  const netW = 4 * W * CELL + 3 * GAP, reserve = document.body.classList.contains('touch') ? 190 : 40;
+  document.documentElement.style.setProperty('--ns', Math.max(0.5, Math.min(1, (innerWidth - reserve) / netW)).toFixed(3));
+  let half, y;
+  if (isCompact()) {
+    // Iso projection of the tower (spawn zone included): 24.5 units tall, 14.1 wide.
+    // Fit it into the band between the score bar and the net, measured from the page.
+    const top = Math.max(document.getElementById('hud').getBoundingClientRect().bottom, 0) + 10;
+    const bottom = net.getBoundingClientRect().top - 10;
+    const band = Math.max(120, bottom - top);
+    half = Math.max(26 * innerHeight / (2 * band), 8.4 / a);
+    const upUnits = (innerHeight / 2 - (top + band / 2)) * (2 * half / innerHeight);
+    y = (upUnits * Math.sqrt(6) - 4) / 2;                   // tower centre on screen = (4 + 2y)/√6
+  } else {
+    const room = innerWidth / 2 - 250;                     // px between centre and the HUD column
+    half = Math.max(17.5, room > 0 ? 7.8 * innerHeight / (2 * room) : 40);
+    y = 1.5;
+  }
+  tower.position.y = y;
   Object.assign(camera, { left: -half * a, right: half * a, top: half, bottom: -half, near: -200, far: 200 });
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
+screen.orientation?.addEventListener?.('change', () => setTimeout(resize, 50));   // fold / unfold / rotate
+document.fonts?.ready.then(resize);                                               // the HUD's height depends on the font
 
 // ── Sound: everything synthesised, nothing to load ──────────────────────────
 const sfx = (() => {
@@ -772,7 +806,6 @@ function drawHud() {
   $('mode').innerHTML = (live ? '<span style="color:#ff4d6d">LIVE</span><br>ALL FOUR FALL' : '<span style="color:#38e07b">FOCUS</span><br>ONE FACE FALLS') +
     `<br><span style="color:var(--dim)">BOARD: ${runMode().toUpperCase()}</span>` +
     (locks === 0 && !live ? '<br><span style="color:var(--dim)">L NOW FOR LIVE</span>' : '');
-  document.querySelectorAll('#touchbar .face').forEach(b => b.classList.toggle('on', +b.dataset.f === active));
   $('tb-live').classList.toggle('on', live);
   nextCtx.clearRect(0, 0, 64, 40);
   if (nt) {
@@ -850,7 +883,7 @@ function controlsHtml() {
   const k = s => `<span class="k">${s}</span>`;
   if (document.body.classList.contains('touch')) return `<div class="ctl">` +
     row('MOVE', 'SWIPE &larr; &rarr;') + row('ROTATE', 'TAP') + row('ROTATE BACK', 'SWIPE &uarr;') +
-    row('SOFT DROP', 'DRAG &darr;') + row('HARD DROP', 'FLICK &darr;') + row('FACE', 'A S D F BUTTONS') + `</div>`;
+    row('SOFT DROP', 'DRAG &darr;') + row('HARD DROP', 'FLICK &darr;') + row('FACE', 'TAP A BOARD BELOW') + `</div>`;
   return `<div class="ctl">` +
     row('FACE', k('A') + k('S') + k('D') + k('F')) + row('MOVE', k('&larr;') + k('&rarr;')) + row('SOFT DROP', k('&darr;')) +
     row('ROTATE', k('&uarr;') + k('X')) + row('ROTATE BACK', k('Z')) + row('HARD DROP', k('SPACE')) +
@@ -932,7 +965,7 @@ window.__booted = true;
 document.getElementById('bootfail')?.remove();   // a slow load can finish after the 8 s message
 // test hook, local dev only
 if (['127.0.0.1', 'localhost'].includes(location.hostname))
-  window.__tc = { get grid() { return grid; }, get actives() { return actives; }, ringCol, clearRows, W, H, S, RING };
+  window.__tc = { get grid() { return grid; }, get actives() { return actives; }, get active() { return active; }, ringCol, clearRows, W, H, S, RING };
 </script>
 </body>
 </html>
