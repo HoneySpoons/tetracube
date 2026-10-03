@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tetracube</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07080d">
+<meta name="description" content="Tetracube: four games of Tetris wrapped around one cube. The corners are shared.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #f4f4f4; --dim: #8a8fa3; --bg: #07080d; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 10px/1.6 "Press Start 2P", ui-monospace, monospace; overflow: hidden;
+    -webkit-font-smoothing: none; font-smooth: never; }
+  body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9;     /* CRT scanlines */
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.22) 2px 3px); }
+
+  .panel { position: relative; background: #000; border: 3px solid var(--ink);
+    box-shadow: 0 0 0 3px #000, 0 0 0 6px #3b3f55; padding: 14px 12px 10px; margin-bottom: 22px; }
+  .panel > .t { position: absolute; top: -9px; left: 8px; padding: 0 6px; background: #000; color: var(--ink); }
+  .panel .v { font-size: 16px; color: #fff; letter-spacing: 1px; }
+
+  #hud { position: fixed; top: 92px; left: 28px; width: 190px; }
+  #hud .v.score { color: #ffd60a; }
+  #hud .v.top { color: #ff4d6d; }
+  #hud .mode { font-size: 9px; line-height: 1.8; }
+  #next { display: block; margin: 4px auto 0; image-rendering: pixelated; }
+
+  #title { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); font-size: 34px;
+    letter-spacing: 4px; white-space: nowrap; z-index: 5; }
+  #title span { text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; }
+
+  #keys { position: fixed; top: 92px; right: 28px; width: 250px; }
+  #keys .row { display: flex; justify-content: space-between; align-items: center; margin: 7px 0; color: var(--dim); }
+  .k { display: inline-block; min-width: 14px; padding: 3px 5px 2px; margin-left: 4px; text-align: center;
+    background: #1b1e2b; color: #fff; border: 2px solid #fff; border-right-color: #555a70; border-bottom-color: #555a70; font-size: 8px; }
+
+  #net { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); image-rendering: pixelated; }
+
+  #pop { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); pointer-events: none; z-index: 6;
+    color: var(--glow, #fff); opacity: 0; white-space: nowrap; letter-spacing: 3px;
+    text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; }
+  #pop.go { animation: pop 1.2s steps(1, end) forwards, blink .12s steps(2, start) 6; }
+  @keyframes pop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(1.4); } 8% { transform: translate(-50%,-50%) scale(1); }
+    80% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
+  @keyframes blink { to { color: #fff; } }
+
+  #msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 7; pointer-events: none; }
+  #msg.on { display: flex; }
+  #msg .panel { text-align: center; padding: 28px 34px 22px; min-width: 300px; }
+  #msg h1 { font-size: 22px; font-weight: normal; margin: 0 0 18px; color: #ff4d6d; text-shadow: 3px 3px 0 #000; }
+  #msg p { margin: 8px 0; }
+  #msg .blink { animation: blinkTxt 1s steps(2, start) infinite; color: #ffd60a; margin-top: 18px; }
+  @keyframes blinkTxt { to { visibility: hidden; } }
+  html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  #msg .panel { pointer-events: auto; max-width: 92vw; max-height: 88vh; overflow: auto; box-sizing: border-box; }
+  .btn { display: inline-block; font: inherit; font-size: 9px; color: #fff; background: #000; cursor: pointer;
+    border: 3px solid #fff; padding: 10px 12px 8px; margin: 6px 4px 0; text-decoration: none; touch-action: manipulation;
+    box-shadow: 3px 3px 0 #3b3f55; }
+  .btn:hover, .btn:active { background: #fff; color: #000; }
+  .btn.go { border-color: #38e07b; color: #38e07b; } .btn.go:hover, .btn.go:active { background: #38e07b; color: #000; }
+  .btns { margin-top: 14px; }
+  .ini { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .ini .btn { margin: 0; padding: 6px 12px 4px; font-size: 10px; box-shadow: none; }
+  body.touch .kbd { display: none; }
+  body:not(.touch) .tch { display: none; }
+  #touchbar { display: none; position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom));
+    justify-content: center; gap: 8px; z-index: 8; }
+  body.touch #touchbar { display: flex; }
+  #touchbar button { font: inherit; font-size: 9px; min-width: 50px; height: 52px; background: #000; color: #fff;
+    border: 3px solid #555a70; touch-action: manipulation; }
+  #touchbar button.face { border-color: var(--fc); color: var(--fc); font-size: 12px; }
+  #touchbar button.face.on { background: var(--fc); color: #000; }
+  #touchbar button.on#tb-live { background: #ff4d6d; border-color: #ff4d6d; color: #000; }
+  @media (max-width: 760px) {
+    #title { font-size: 17px; top: calc(10px + env(safe-area-inset-top)); letter-spacing: 2px; }
+    #hud { top: calc(40px + env(safe-area-inset-top)); left: 8px; right: 8px; width: auto; display: flex; gap: 7px; }
+    #hud .panel { flex: 1; margin: 0; padding: 12px 5px 4px; border-width: 2px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #3b3f55; }
+    #hud .panel > .t { font-size: 7px; top: -7px; left: 4px; padding: 0 3px; }
+    #hud .panel .v { font-size: 9px; letter-spacing: 0; }
+    #hud .p-top, #hud .p-mode { display: none; }
+    #next { width: 40px; height: 25px; margin-top: 0; }
+    #keys { display: none; }
+    #net { bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%) scale(.62); transform-origin: bottom center; }
+    #msg .panel { padding: 20px 14px 16px; min-width: 0; font-size: 9px; }
+    #msg h1 { font-size: 17px; }
+    table.board td { padding: 3px 5px; }
+    .boards { flex-direction: column; gap: 6px; }
+  }
+  table.board { border-collapse: collapse; margin: 8px auto 4px; }
+  table.board td { padding: 4px 9px; text-align: right; }
+  table.board td:nth-child(2) { text-align: left; }
+  table.board tr.h td { color: var(--dim); font-size: 8px; }
+  table.board tr.me td { color: #000; background: #ffd60a; animation: blinkTxt .6s steps(2, start) infinite; }
+  .boards { display: flex; gap: 26px; }
+  .bt { margin: 4px 0 0; }
+  .initials { display: flex; gap: 14px; justify-content: center; margin: 14px 0 10px; }
+  .initials span { font-size: 30px; width: 40px; padding-bottom: 6px; border-bottom: 4px solid #555a70; color: #fff; }
+  .initials span.cur { border-bottom-color: #ffd60a; color: #ffd60a; animation: blinkTxt .5s steps(2, start) infinite; }
+  .hint { font-size: 8px; color: var(--dim); }
+  #coin { display: inline-block; margin-top: 18px; color: #ffd60a; text-decoration: none; font-size: 9px;
+    border: 3px solid #ffd60a; padding: 9px 10px 7px; background: #000; box-shadow: 4px 4px 0 #6b5400; }
+  #coin:hover { background: #ffd60a; color: #000; }
+  #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+<div id="title"></div>
+<div id="hud">
+  <div class="panel p-top"><span class="t">TOP</span><div class="v top" id="top">000000</div></div>
+  <div class="panel"><span class="t">SCORE</span><div class="v score" id="score">000000</div></div>
+  <div class="panel"><span class="t">LINES</span><div class="v" id="lines">000</div></div>
+  <div class="panel"><span class="t">LEVEL</span><div class="v" id="level">01</div></div>
+  <div class="panel"><span class="t">NEXT</span><canvas id="next" width="64" height="40"></canvas></div>
+  <div class="panel p-mode"><span class="t">MODE</span><div class="mode" id="mode"></div></div>
+</div>
+<div id="keys" class="panel"><span class="t">CONTROLS</span>
+  <div class="row">FACE<span><span class="k">A</span><span class="k">S</span><span class="k">D</span><span class="k">F</span></span></div>
+  <div class="row">MOVE<span><span class="k">&larr;</span><span class="k">&rarr;</span></span></div>
+  <div class="row">SOFT DROP<span class="k">&darr;</span></div>
+  <div class="row">ROTATE<span><span class="k">&uarr;</span><span class="k">X</span></span></div>
+  <div class="row">ROTATE BACK<span class="k">Z</span></div>
+  <div class="row">HARD DROP<span class="k">SPACE</span></div>
+  <div class="row">LIVE MODE<span class="k">L</span></div>
+  <div class="row">PAUSE<span><span class="k">ESC</span><span class="k">P</span></span></div>
+  <div class="row">RESTART<span class="k">R</span></div>
+  <div class="row">HIGH SCORES<span class="k">H</span></div>
+  <div class="row">SOUND <span id="snd">ON</span><span class="k">M</span></div>
+</div>
+<canvas id="net"></canvas>
+<div id="msg"></div>
+<div id="pop"></div>
+<div id="touchbar">
+  <button data-act="live" id="tb-live">LIVE</button>
+  <button data-act="face" data-f="0" class="face" style="--fc:#4cc9f0">A</button>
+  <button data-act="face" data-f="1" class="face" style="--fc:#f72585">S</button>
+  <button data-act="face" data-f="2" class="face" style="--fc:#90be6d">D</button>
+  <button data-act="face" data-f="3" class="face" style="--fc:#f9c74f">F</button>
+  <button data-act="pause">II</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ── The board ────────────────────────────────────────────────────────────────
+// Four faces, each W wide. A face's last column IS the next face's first column,
+// so the tower is a ring of 4·(W−1) columns. Rows above H are the spawn zone.
+const W = 10, H = 16, HT = H + 4, S = W - 1, RING = 4 * S;
+const FACE_KEYS = ['a', 's', 'd', 'f'];
+const FACE_COLORS = [0x4cc9f0, 0xf72585, 0x90be6d, 0xf9c74f];
+
+const SHAPES = {               // [x, y], y up
+  I: [[0, 2], [1, 2], [2, 2], [3, 2]],
+  O: [[1, 1], [2, 1], [1, 2], [2, 2]],
+  T: [[0, 1], [1, 1], [2, 1], [1, 2]],
+  S: [[0, 1], [1, 1], [1, 2], [2, 2]],
+  Z: [[1, 1], [2, 1], [0, 2], [1, 2]],
+  J: [[0, 1], [1, 1], [2, 1], [0, 2]],
+  L: [[0, 1], [1, 1], [2, 1], [2, 2]],
+};
+const CENTER = { I: 1.5, O: 1.5 };
+const PIECE_COLORS = { I: 0x00d8ff, O: 0xffd60a, T: 0xb15cff, S: 0x38e07b, Z: 0xff4d6d, J: 0x3a86ff, L: 0xff9f1c };
+const KICKS = [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, 1], [0, -1]];
+
+const ringCol = (f, j) => (f * S + j) % RING;
+
+function rotCells(type, rot) {
+  const c = CENTER[type] ?? 1;
+  let cs = SHAPES[type].map(a => a.slice());
+  for (let i = 0; i < ((rot % 4) + 4) % 4; i++) cs = cs.map(([x, y]) => [c + (y - c), c - (x - c)]);
+  return cs;
+}
+const cellsOf = p => rotCells(p.type, p.rot).map(([x, y]) => [p.x + x, p.y + y]);
+
+// ── State ────────────────────────────────────────────────────────────────────
+let grid, actives, bags, lastDrop, active, score, lines, live, paused, over, flash;
+// A run is ranked LIVE only if live mode was on before the first lock and never turned off.
+let locks = 0, rankedLive = false, runStart = 0;
+const runMode = () => rankedLive ? 'live' : 'focus';
+
+function reset() {
+  fx.wipe();
+  grid = Array.from({ length: RING }, () => Array(HT).fill(null));
+  actives = [null, null, null, null];
+  bags = [[], [], [], []];
+  lastDrop = [0, 0, 0, 0];
+  active = 0; score = 0; lines = 0; live = false; paused = false; over = false; flash = ''; newHi = false;
+  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; renderOverlay();
+  for (let f = 0; f < 4; f++) spawn(f);
+  setActive(0, true);
+}
+
+function peekType(f) { refill(f); return bags[f][bags[f].length - 1]; }
+function nextType(f) { refill(f); return bags[f].pop(); }
+function refill(f) {
+  if (!bags[f].length) {
+    bags[f] = Object.keys(SHAPES);
+    for (let i = bags[f].length - 1; i > 0; i--) {
+      const k = Math.floor(Math.random() * (i + 1));
+      [bags[f][i], bags[f][k]] = [bags[f][k], bags[f][i]];
+    }
+  }
+}
+
+function collides(f, cells) {
+  for (const [j, r] of cells) {
+    if (j < 0 || j >= W || r < 0 || r >= HT) return true;
+    const c = ringCol(f, j);
+    if (grid[c][r]) return true;
+    for (let g = 0; g < 4; g++) {                 // another face's falling piece on a shared corner
+      if (g === f || !actives[g]) continue;
+      for (const [gj, gr] of cellsOf(actives[g])) if (gr === r && ringCol(g, gj) === c) return true;
+    }
+  }
+  return false;
+}
+
+function spawn(f) {
+  const type = nextType(f);
+  const p = { type, rot: 0, x: 3, y: H - 1 };
+  actives[f] = null;
+  if (collides(f, cellsOf(p))) { gameOver(); return; }
+  actives[f] = p;
+}
+
+function tryMove(f, dx, dy, drot = 0) {
+  const p = actives[f]; if (!p) return false;
+  const kicks = drot ? KICKS : [[0, 0]];
+  for (const [kx, ky] of kicks) {
+    const q = { ...p, x: p.x + dx + kx, y: p.y + dy + ky, rot: p.rot + drot };
+    if (!collides(f, cellsOf(q))) { actives[f] = q; return true; }
+  }
+  return false;
+}
+
+function lock(f) {
+  const p = actives[f]; if (!p) return;
+  actives[f] = null;
+  let toppedOut = false;
+  for (const [j, r] of cellsOf(p)) { grid[ringCol(f, j)][r] = p.type; if (r >= H) toppedOut = true; }
+  fx.lock(f, p);
+  locks++;
+  clearRows();
+  if (toppedOut) { gameOver(); return; }
+  spawn(f);
+}
+
+// A full row on one face removes its W cells — including the two corner cells,
+// which belong to the neighbouring faces too. Their columns drop, which can
+// complete *their* rows. Repeat until nothing clears: that's a cascade.
+function clearRows() {
+  for (let wave = 0; ; wave++) {
+    const remove = new Map();                       // column → Map(row → face that cleared it)
+    let n = 0;
+    for (let g = 0; g < 4; g++) for (let r = 0; r < HT; r++) {
+      let full = true;
+      for (let j = 0; j < W && full; j++) if (!grid[ringCol(g, j)][r]) full = false;
+      if (!full) continue;
+      n++;
+      for (let j = 0; j < W; j++) {
+        const c = ringCol(g, j);
+        if (!remove.has(c)) remove.set(c, new Map());
+        if (!remove.get(c).has(r)) remove.get(c).set(r, g);
+      }
+    }
+    if (!n) return;
+    const gone = [];
+    for (const [c, rows] of remove) {
+      for (const [r, g] of rows) gone.push({ c, r, g, type: grid[c][r] });
+      [...rows.keys()].sort((a, b) => b - a).forEach(r => { grid[c].splice(r, 1); grid[c].push(null); });
+    }
+    const lvBefore = level();
+    lines += n;
+    const base = [0, 100, 300, 500, 800][Math.min(n, 4)] + Math.max(0, n - 4) * 400;
+    score += base * level() * (wave + 1);
+    fx.clear(gone, wave, n);
+    if (level() > lvBefore) fx.levelUp();
+    for (let g = 0; g < 4; g++) {                    // a shifted corner may now sit inside a falling piece
+      const p = actives[g];
+      while (p && collides(g, cellsOf(p)) && p.y < HT) p.y++;
+    }
+  }
+}
+
+const level = () => 1 + Math.floor(lines / 10);
+const interval = () => Math.max(90, 800 - (level() - 1) * 65);
+
+let hi = +(localStorage.getItem('tetracube.hi') || 0), newHi = false;
+function gameOver() {
+  if (over) return; over = true;
+  newHi = score > hi;
+  if (newHi) { hi = score; localStorage.setItem('tetracube.hi', hi); }
+  fx.over();
+  if (score <= 0) { ov = { kind: 'over', stage: 'board', mode: runMode(), board: null }; renderOverlay(); return; }
+  const mine = ov = {
+    kind: 'over', stage: 'loading', mode: runMode(), board: null, rank: null, err: '',
+    initials: (localStorage.getItem('tetracube.initials') || 'AAA').split(''), cursor: 0,
+    run: { score, lines, level: level(), mode: runMode(), durationMs: Math.round(performance.now() - runStart) },
+  };
+  renderOverlay();
+  fetchBoard(mine.mode).then(b => {
+    if (ov !== mine) return;
+    mine.board = b;
+    mine.stage = (b.length < 10 || score > b[b.length - 1].score) ? 'entry' : 'board';
+    renderOverlay();
+  }).catch(() => { if (ov === mine) { mine.stage = 'offline'; renderOverlay(); } });
+}
+
+// ── Input ────────────────────────────────────────────────────────────────────
+addEventListener('keydown', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  sfx.init();
+  if (ov?.stage === 'entry') { e.preventDefault(); entryKey(e.key); return; }
+  if (k === 'm') { document.getElementById('snd').textContent = sfx.toggle() ? 'OFF' : 'ON'; return; }
+  if (k === 'h' && !over) { toggleBoards(); return; }
+  if (ov?.kind === 'boards') { if (k === 'Escape' || k === 'p' || k === 'h') toggleBoards(); return; }
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) e.preventDefault();
+  if (k === 'r') { reset(); return; }
+  if (over) return;
+  if (k === 'p' || k === 'Escape') { togglePause(); return; }
+  if (paused) return;
+  const fi = FACE_KEYS.indexOf(k);
+  if (fi >= 0) { setActive(fi); return; }
+  if (k === 'l') { toggleLive(); return; }
+  const f = active;
+  if (k === 'ArrowLeft') { if (tryMove(f, -1, 0)) sfx.move(); }
+  else if (k === 'ArrowRight') { if (tryMove(f, 1, 0)) sfx.move(); }
+  else if (k === 'ArrowDown') { if (tryMove(f, 0, -1)) { score += 1; sfx.soft(); } else lock(f); lastDrop[f] = performance.now(); }
+  else if (k === 'ArrowUp' || k === 'x') { if (tryMove(f, 0, 0, 1)) sfx.rotate(); }
+  else if (k === 'z') { if (tryMove(f, 0, 0, -1)) sfx.rotate(); }
+  else if (k === ' ') hardDrop();
+});
+
+function hardDrop() {
+  const f = active, from = actives[f]; if (!from) return;
+  let d = 0; while (tryMove(f, 0, -1)) d++;
+  fx.hardDrop(f, from, actives[f], d);
+  score += 2 * d; lock(f); lastDrop[f] = performance.now();
+}
+function toggleLive() {
+  live = !live; lastDrop = lastDrop.map(() => performance.now());
+  rankedLive = live && locks === 0;
+}
+function togglePause() {
+  if (over || ov) return;
+  paused = !paused;
+  if (!paused) lastDrop = lastDrop.map(() => performance.now());
+  renderOverlay();
+}
+const playable = () => !over && !paused && !ov;
+
+// ── Touch: swipe to move, tap to rotate, flick down to drop ─────────────────
+if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+let tp = null;
+const STEP = () => Math.max(22, Math.min(40, innerWidth / 14));
+addEventListener('pointerdown', e => {
+  sfx.init();
+  if (e.pointerType === 'mouse' || (e.target instanceof Element && e.target.closest('button, a, #msg .panel'))) return;
+  tp = { id: e.pointerId, x0: e.clientX, y0: e.clientY, lx: e.clientX, ly: e.clientY, t0: performance.now(), moved: false };
+});
+addEventListener('pointermove', e => {
+  if (!tp || e.pointerId !== tp.id || !playable()) return;
+  const s = STEP(), f = active;
+  while (e.clientX - tp.lx >= s) { tp.lx += s; tp.moved = true; if (tryMove(f, 1, 0)) sfx.move(); }
+  while (tp.lx - e.clientX >= s) { tp.lx -= s; tp.moved = true; if (tryMove(f, -1, 0)) sfx.move(); }
+  while (e.clientY - tp.ly >= s * 1.3) {
+    tp.ly += s * 1.3; tp.moved = true;
+    if (tryMove(f, 0, -1)) { score += 1; sfx.soft(); lastDrop[f] = performance.now(); }
+  }
+  if (tp.ly - e.clientY > s) tp.ly = e.clientY;          // upward drift doesn't bank soft drops
+});
+addEventListener('pointerup', e => {
+  if (!tp || e.pointerId !== tp.id) return;
+  const t = tp, dt = performance.now() - t.t0, dx = e.clientX - t.x0, dy = e.clientY - t.y0;
+  tp = null;
+  if (!playable()) return;
+  const vertical = Math.abs(dy) > 2 * Math.abs(dx);
+  if (vertical && dy > 70 && dt < 260) hardDrop();
+  else if (vertical && dy < -60 && dt < 300) { if (tryMove(active, 0, 0, -1)) sfx.rotate(); }
+  else if (!t.moved && dt < 300) { if (tryMove(active, 0, 0, 1)) sfx.rotate(); }
+});
+addEventListener('pointercancel', () => { tp = null; });
+
+// every on-screen button routes through here
+addEventListener('click', e => {
+  const b = e.target instanceof Element && e.target.closest('[data-act]'); if (!b) return;
+  sfx.init();
+  const act = b.dataset.act, i = +b.dataset.i;
+  if (act === 'face' && playable()) setActive(+b.dataset.f);
+  else if (act === 'live' && playable()) toggleLive();
+  else if (act === 'pause' || act === 'resume') togglePause();
+  else if (act === 'again') reset();
+  else if (act === 'boards') toggleBoards();
+  else if (ov?.stage === 'entry') {
+    if (act === 'up' || act === 'down') {
+      ov.cursor = i;
+      const k = ALPHA.indexOf(ov.initials[i]), d = act === 'up' ? 1 : -1;
+      ov.initials[i] = ALPHA[(k + d + ALPHA.length) % ALPHA.length]; sfx.rotate(); renderOverlay();
+    }
+    else if (act === 'save') submit(ov);
+    else if (act === 'skip') { ov.stage = 'board'; renderOverlay(); }
+  }
+});
+
+// ── Scene ────────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0e14);
+
+const camera = new THREE.OrthographicCamera();
+camera.position.set(40, 40, 40);                    // true isometric
+camera.lookAt(0, 0, 0);
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(-10, 30, 25);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xbfd4ff, 0.55);
+fill.position.set(30, 10, -5);
+scene.add(fill);
+
+const tower = new THREE.Group();
+tower.position.y = 1.5;
+scene.add(tower);
+
+const Y0 = -H / 2;                                   // world y of row 0's bottom
+// world (x, z) of a ring column: face 0 is +z, faces go counter-clockwise seen from above
+function colXZ(c) {
+  const f = Math.floor(c / S), j = c % S;
+  const [x, z] = [[j, S], [S, S - j], [S - j, 0], [0, j]][f];
+  return [x - S / 2, z - S / 2];
+}
+
+const core = new THREE.Mesh(new THREE.BoxGeometry(W - 2, H, W - 2),
+  new THREE.MeshLambertMaterial({ color: 0x161c27 }));
+tower.add(core);
+
+// grid + frame per face, built for face 0 then turned into place
+const faceLines = [];
+for (let f = 0; f < 4; f++) {
+  const pts = [], z = W / 2 + 0.005;
+  for (let j = 0; j <= W; j++) pts.push(j - W / 2, Y0, z, j - W / 2, Y0 + H, z);
+  for (let r = 0; r <= H; r++) pts.push(-W / 2, Y0 + r, z, W / 2, Y0 + r, z);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const m = new THREE.LineBasicMaterial({ color: FACE_COLORS[f], transparent: true, opacity: 0.08 });
+  const lines = new THREE.LineSegments(g, m);
+  lines.rotation.y = f * Math.PI / 2;
+  tower.add(lines);
+  faceLines.push(lines);
+}
+
+const box = new THREE.BoxGeometry(0.94, 0.94, 0.94);
+const solid = new THREE.InstancedMesh(box, new THREE.MeshLambertMaterial(), RING * HT + 64);
+const ghost = new THREE.InstancedMesh(box,
+  new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.22, depthWrite: false }), 16);
+tower.add(solid, ghost);
+const m4 = new THREE.Matrix4(), col = new THREE.Color();
+
+function place(mesh, i, c, r, hex) {
+  const [x, z] = colXZ(c);
+  m4.makeTranslation(x, Y0 + r + 0.5, z);
+  mesh.setMatrixAt(i, m4);
+  mesh.setColorAt(i, col.setHex(hex));
+}
+
+function drawTower() {
+  let n = 0;
+  for (let c = 0; c < RING; c++) for (let r = 0; r < HT; r++) {
+    const t = grid[c][r]; if (!t) continue;
+    const age = performance.now() - (lockGlow.get(c * HT + r) ?? -1e9);
+    place(solid, n++, c, r, PIECE_COLORS[t]);
+    if (age < 220) solid.setColorAt(n - 1, col.setHex(PIECE_COLORS[t]).lerp(WHITE, 0.75 * (1 - age / 220)));
+  }
+  for (let f = 0; f < 4; f++) {
+    const p = actives[f]; if (!p) continue;
+    for (const [j, r] of cellsOf(p)) place(solid, n++, ringCol(f, j), r, PIECE_COLORS[p.type]);
+  }
+  solid.count = n;
+  solid.instanceMatrix.needsUpdate = true;
+  if (solid.instanceColor) solid.instanceColor.needsUpdate = true;
+
+  let g = 0;
+  const p = actives[active];
+  if (p && !over) {
+    let q = { ...p };
+    while (!collides(active, cellsOf({ ...q, y: q.y - 1 }))) q.y--;
+    if (q.y !== p.y) for (const [j, r] of cellsOf(q)) place(ghost, g++, ringCol(active, j), r, PIECE_COLORS[p.type]);
+  }
+  ghost.count = g;
+  ghost.instanceMatrix.needsUpdate = true;
+  if (ghost.instanceColor) ghost.instanceColor.needsUpdate = true;
+
+  faceLines.forEach((l, f) => { l.material.opacity = f === active ? 0.45 + 0.5 * faceFlash : 0.07; });
+  edges.material.opacity = 0.1 + 0.9 * edgeGlow;
+}
+
+// turn the tower so the chosen face is front-left; its right neighbour is front-right
+let rotTarget = 0, rotVel = 0, faceFlash = 0;
+function setActive(f, snap = false) {
+  active = f;
+  lastDrop[f] = performance.now();
+  const want = -f * Math.PI / 2;
+  let d = want - rotTarget;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  rotTarget += d;
+  if (snap) { tower.rotation.y = rotTarget; rotVel = 0; }
+  else if (d) { sfx.swoosh(d); faceFlash = 1; }
+}
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  const a = innerWidth / innerHeight, phone = innerWidth <= 760;
+  const half = phone ? Math.max(17.5, 9 / a) : 17.5;
+  tower.position.y = phone ? 4.5 : 1.5;
+  Object.assign(camera, { left: -half * a, right: half * a, top: half, bottom: -half, near: -200, far: 200 });
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+// ── Sound: everything synthesised, nothing to load ──────────────────────────
+const sfx = (() => {
+  let ctx, master, noiseBuf, muted = false;
+  const st = (base, n) => base * Math.pow(2, n / 12);
+  const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31];
+  function tone(f, dur, type = 'sine', vol = 0.1, f2 = null, when = 0) {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime + when, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.03);
+  }
+  function noise(dur, vol, f, f2, when = 0, q = 1) {
+    if (!ctx || muted) return;
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const t = ctx.currentTime + when, s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noiseBuf; fl.type = 'bandpass'; fl.Q.value = q;
+    fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(fl).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.03);
+  }
+  return {
+    init() {
+      if (!ctx) { ctx = new AudioContext(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); }
+      if (ctx.state === 'suspended') ctx.resume();
+    },
+    toggle() { muted = !muted; return muted; },
+    move() { tone(330, 0.035, 'square', 0.025); },
+    soft() { tone(190, 0.025, 'square', 0.015); },
+    rotate() { tone(520, 0.07, 'triangle', 0.06, 780); },
+    lock() { noise(0.09, 0.25, 500, 200, 0, 0.8); tone(110, 0.12, 'sine', 0.2, 70); },
+    hard() { noise(0.18, 0.35, 2400, 200, 0, 0.7); tone(95, 0.28, 'sine', 0.35, 42); },
+    swoosh(dir) { noise(0.24, 0.2, dir > 0 ? 450 : 1700, dir > 0 ? 1700 : 450, 0, 1.4); },
+    clear(n, wave) {
+      const base = st(523.25, wave * 3), k = Math.min(n, 4) + 2;
+      for (let i = 0; i < k; i++) tone(st(base, PENTA[i + wave] ?? 24), 0.2, 'triangle', 0.09, null, i * 0.055);
+      noise(0.35, 0.12, 6000, 2000, 0, 0.5);
+      if (wave) tone(st(base, 24), 0.6, 'sine', 0.06, st(base, 36), 0.12);
+    },
+    level() { [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone(st(392, s), 0.15, 'square', 0.045, null, i * 0.06)); },
+    over() { tone(440, 1.5, 'sawtooth', 0.12, 38); noise(1.3, 0.3, 900, 60, 0.1, 0.6); },
+  };
+})();
+
+// ── Juice: debris, glow, shake, a pop banner ─────────────────────────────────
+const WHITE = new THREE.Color(0xffffff);
+const lockGlow = new Map();
+let shake = 0, edgeGlow = 0, bgPulse = 0;
+const NORMALS = [[0, 0, 1], [1, 0, 0], [0, 0, -1], [-1, 0, 0]];
+const PMAX = 1400;
+const debris = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), new THREE.MeshLambertMaterial(), PMAX);
+const glow = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), PMAX);
+debris.frustumCulled = glow.frustumCulled = false;
+debris.count = glow.count = 0;
+tower.add(debris, glow);
+{ // the four corner edges, where faces share a column — they light up on a cascade
+  const pts = [];
+  for (const [x, z] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) pts.push(x * W / 2, Y0, z * W / 2, x * W / 2, Y0 + H, z * W / 2);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  var edges = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1 }));
+  tower.add(edges);
+}
+const parts = [], glows = [];
+const quat = new THREE.Quaternion(), eul = new THREE.Euler(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+const cellPos = (c, r) => { const [x, z] = colXZ(c); return [x, Y0 + r + 0.5, z]; };
+const rnd = (a = 1) => (Math.random() - 0.5) * 2 * a;
+function addPart(x, y, z, vx, vy, vz, color, life) {
+  if (parts.length >= PMAX) parts.shift();
+  parts.push({ x, y, z, vx, vy, vz, color, life, age: 0, rx: rnd(3), ry: rnd(3), sx: rnd(9), sy: rnd(9) });
+}
+function addGlow(x, y, z, color, life, gain, s0 = 1, grow = 0.6) {
+  if (glows.length >= PMAX) glows.shift();
+  glows.push({ x, y, z, color, life, gain, s0, grow, age: 0 });
+}
+const pop = document.getElementById('pop');
+function banner(text, wave = 0, color = FACE_COLORS[active]) {
+  if (!text) return;
+  pop.textContent = text;
+  pop.style.fontSize = (22 + wave * 8) + 'px';
+  pop.style.setProperty('--glow', hex(color));
+  pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go');
+}
+
+const fx = {
+  clear(gone, wave, n) {
+    for (const { c, r, g, type } of gone) {
+      const [x, y, z] = cellPos(c, r), [nx, , nz] = NORMALS[g], color = PIECE_COLORS[type] ?? 0xffffff;
+      addGlow(x, y, z, 0xffffff, 0.35, 1, 1, 0.7);
+      for (let i = 0; i < 3; i++) {
+        const out = 4 + Math.random() * 7;
+        addPart(x, y, z, nx * out + rnd(2), 3 + Math.random() * 6, nz * out + rnd(2), color, 1 + Math.random() * 0.7);
+      }
+    }
+    shake = Math.min(1.4, shake + 0.25 + 0.15 * n + 0.4 * wave);
+    if (wave) edgeGlow = 1;
+    sfx.clear(n, wave);
+    banner(wave ? `CASCADE ×${wave + 1}` : n >= 4 ? 'TETRIS' : n >= 2 ? `${n} ROWS` : '', wave);
+  },
+  lock(f, p) {
+    const now = performance.now();
+    for (const [j, r] of cellsOf(p)) {
+      const c = ringCol(f, j);
+      lockGlow.set(c * HT + r, now);
+      const [x, y, z] = cellPos(c, r);
+      addGlow(x, y, z, PIECE_COLORS[p.type], 0.2, 0.6, 1, 0.25);
+    }
+    sfx.lock();
+    shake = Math.min(1.4, shake + 0.06);
+  },
+  hardDrop(f, from, to, d) {
+    if (!d) return;
+    const top = cellsOf(from), bottom = cellsOf(to), color = PIECE_COLORS[from.type];
+    bottom.forEach(([j, r], i) => {
+      const c = ringCol(f, j);
+      for (let rr = r; rr <= top[i][1]; rr++) {
+        const [x, y, z] = cellPos(c, rr), k = 1 - (rr - r) / (d + 1);
+        addGlow(x, y, z, color, 0.18 + 0.2 * k, 0.45 * k, 0.75, 0);
+      }
+    });
+    sfx.hard();
+    shake = Math.min(1.4, shake + 0.35);
+  },
+  levelUp() { sfx.level(); bgPulse = 1; setTimeout(() => banner(`LEVEL ${level()}`, 1, 0xffffff), 450); },
+  over() {
+    for (let c = 0; c < RING; c++) for (let r = 0; r < HT; r++) {
+      const t = grid[c][r]; if (!t) continue;
+      const [x, y, z] = cellPos(c, r);
+      for (let i = 0; i < 2; i++) addPart(x, y, z, x * 0.9 + rnd(3), 2 + Math.random() * 9, z * 0.9 + rnd(3), PIECE_COLORS[t], 2 + Math.random());
+      grid[c][r] = null;
+    }
+    actives.fill(null);
+    shake = 1.6; edgeGlow = 1;
+    sfx.over();
+  },
+  wipe() { parts.length = 0; glows.length = 0; lockGlow.clear(); shake = 0; },
+  update(dt) {
+    let i = 0;
+    for (let k = parts.length - 1; k >= 0; k--) {
+      const p = parts[k];
+      p.age += dt;
+      if (p.age >= p.life) { parts.splice(k, 1); continue; }
+      p.vy -= 20 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.rx += p.sx * dt; p.ry += p.sy * dt;
+      const s = 1 - Math.pow(p.age / p.life, 2);
+      quat.setFromEuler(eul.set(p.rx, p.ry, 0));
+      m4.compose(pos.set(p.x, p.y, p.z), quat, scl.set(s, s, s));
+      debris.setMatrixAt(i, m4); debris.setColorAt(i, col.setHex(p.color)); i++;
+    }
+    debris.count = i;
+    debris.instanceMatrix.needsUpdate = true;
+    if (debris.instanceColor) debris.instanceColor.needsUpdate = true;
+    i = 0;
+    for (let k = glows.length - 1; k >= 0; k--) {
+      const g = glows[k];
+      g.age += dt;
+      if (g.age >= g.life) { glows.splice(k, 1); continue; }
+      const t = g.age / g.life, s = g.s0 * (1 + g.grow * t);
+      m4.compose(pos.set(g.x, g.y, g.z), quat.identity(), scl.set(s, s, s));
+      glow.setMatrixAt(i, m4); glow.setColorAt(i, col.setHex(g.color).multiplyScalar(g.gain * (1 - t))); i++;
+    }
+    glow.count = i;
+    glow.instanceMatrix.needsUpdate = true;
+    if (glow.instanceColor) glow.instanceColor.needsUpdate = true;
+  },
+};
+
+// ── The net: all four faces unfolded, corners repeated on both sides ─────────
+const net = document.getElementById('net'), nx = net.getContext('2d');
+const CELL = 7, GAP = 14;
+net.width = (4 * W * CELL + 3 * GAP) * devicePixelRatio;
+net.height = (H * CELL + 18) * devicePixelRatio;
+net.style.width = net.width / devicePixelRatio + 'px';
+net.style.height = net.height / devicePixelRatio + 'px';
+const hex = h => '#' + h.toString(16).padStart(6, '0');
+
+function drawNet() {
+  nx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  nx.clearRect(0, 0, net.width, net.height);
+  for (let f = 0; f < 4; f++) {
+    const ox = f * (W * CELL + GAP);
+    nx.fillStyle = '#121822'; nx.fillRect(ox, 0, W * CELL, H * CELL);
+    nx.fillStyle = '#1c2431';
+    nx.fillRect(ox, 0, CELL, H * CELL); nx.fillRect(ox + (W - 1) * CELL, 0, CELL, H * CELL);
+    const occ = {};
+    const p = actives[f];
+    if (p) for (const [j, r] of cellsOf(p)) occ[j + ',' + r] = p.type;
+    for (let j = 0; j < W; j++) for (let r = 0; r < H; r++) {
+      const t = occ[j + ',' + r] || grid[ringCol(f, j)][r];
+      if (!t) continue;
+      nx.fillStyle = hex(PIECE_COLORS[t]);
+      nx.fillRect(ox + j * CELL, (H - 1 - r) * CELL, CELL - 1, CELL - 1);
+    }
+    nx.strokeStyle = f === active ? hex(FACE_COLORS[f]) : '#2a3342';
+    nx.lineWidth = f === active ? 2 : 1;
+    nx.strokeRect(ox - 1, -1, W * CELL + 2, H * CELL + 2);
+    nx.fillStyle = f === active ? hex(FACE_COLORS[f]) : '#6b7686';
+    nx.font = '8px "Press Start 2P", monospace'; nx.textAlign = 'center';
+    nx.fillText(FACE_KEYS[f].toUpperCase(), ox + W * CELL / 2, H * CELL + 14);
+  }
+}
+
+// ── HUD ──────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id), msg = $('msg');
+const pad = (n, w) => String(n).padStart(w, '0');
+$('title').innerHTML = [...'TETRACUBE'].map((ch, i) =>
+  `<span style="color:${hex(Object.values(PIECE_COLORS)[i % 7])}">${ch}</span>`).join('');
+const nextCtx = $('next').getContext('2d');
+let hudKey = '';
+function drawBlock(ctx, x, y, s, color) {        // NES-style block: flat face, light corner, dark edge
+  ctx.fillStyle = color; ctx.fillRect(x, y, s, s);
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(x + 1, y + 1, 2, 2);
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(x, y + s - 2, s, 2); ctx.fillRect(x + s - 2, y, 2, s);
+}
+function drawHud() {
+  const nt = over ? '' : peekType(active);
+  const key = [score, hi, lines, level(), live, rankedLive, nt, over, active].join('|');
+  if (key === hudKey) return;
+  hudKey = key;
+  $('score').textContent = pad(score, 6);
+  $('top').textContent = pad(Math.max(hi, score), 6);
+  $('lines').textContent = pad(lines, 3);
+  $('level').textContent = pad(level(), 2);
+  $('mode').innerHTML = (live ? '<span style="color:#ff4d6d">LIVE</span><br>ALL FOUR FALL' : '<span style="color:#38e07b">FOCUS</span><br>ONE FACE FALLS') +
+    `<br><span style="color:var(--dim)">BOARD: ${runMode().toUpperCase()}</span>` +
+    (locks === 0 && !live ? '<br><span style="color:var(--dim)">L NOW FOR LIVE</span>' : '');
+  document.querySelectorAll('#touchbar .face').forEach(b => b.classList.toggle('on', +b.dataset.f === active));
+  $('tb-live').classList.toggle('on', live);
+  nextCtx.clearRect(0, 0, 64, 40);
+  if (nt) {
+    const cs = SHAPES[nt], xs = cs.map(c => c[0]), ys = cs.map(c => c[1]), B = 12;
+    const w = (Math.max(...xs) - Math.min(...xs) + 1) * B, h = (Math.max(...ys) - Math.min(...ys) + 1) * B;
+    for (const [x, y] of cs) drawBlock(nextCtx, (64 - w) / 2 + (x - Math.min(...xs)) * B, (40 - h) / 2 + (Math.max(...ys) - y) * B, B, hex(PIECE_COLORS[nt]));
+  }
+}
+
+// ── Leaderboard ──────────────────────────────────────────────────────────────
+const COFFEE_URL = '#coffee-link-pending';   // ← Dan's Buy Me a Coffee / Ko-fi page
+const API = '/api/scores', ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+let ov = null;   // overlay: null | { kind: 'over', stage } | { kind: 'boards' }
+async function fetchBoard(mode, limit = 10) {
+  const r = await fetch(`${API}?mode=${mode}&limit=${limit}`);
+  if (!r.ok) throw new Error(r.status);
+  return (await r.json()).scores;
+}
+function entryKey(key) {
+  const o = ov, ch = key.length === 1 ? key.toUpperCase() : key;
+  if (ALPHA.includes(ch) && ch.length === 1) { o.initials[o.cursor] = ch; o.cursor = Math.min(2, o.cursor + 1); sfx.move(); }
+  else if (ch === 'Backspace' || ch === 'ArrowLeft') { o.cursor = Math.max(0, o.cursor - 1); sfx.move(); }
+  else if (ch === 'ArrowRight') { o.cursor = Math.min(2, o.cursor + 1); sfx.move(); }
+  else if (ch === 'ArrowUp' || ch === 'ArrowDown') {
+    const i = ALPHA.indexOf(o.initials[o.cursor]), d = ch === 'ArrowUp' ? 1 : -1;
+    o.initials[o.cursor] = ALPHA[(i + d + ALPHA.length) % ALPHA.length]; sfx.rotate();
+  }
+  else if (ch === 'Escape') { o.stage = 'board'; }
+  else if (ch === 'Enter') { submit(o); return; }
+  renderOverlay();
+}
+async function submit(o) {
+  o.stage = 'sending'; o.err = ''; renderOverlay();
+  const initials = o.initials.join('');
+  try {
+    const r = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initials, ...o.run }) });
+    const body = await r.json().catch(() => ({}));
+    if (ov !== o) return;
+    if (r.status === 400 && body.error === 'initials') { o.stage = 'entry'; o.err = 'PICK OTHER INITIALS'; renderOverlay(); return; }
+    if (!r.ok) { o.stage = 'offline'; o.err = r.status === 429 ? 'TOO MANY SCORES — TRY LATER' : 'SCORE REJECTED'; renderOverlay(); return; }
+    localStorage.setItem('tetracube.initials', initials);
+    o.rank = body.rank; o.mine = { initials, score: o.run.score };
+    o.board = await fetchBoard(o.mode);
+    if (ov !== o) return;
+    o.stage = 'board'; sfx.level(); renderOverlay();
+  } catch { if (ov === o) { o.stage = 'offline'; renderOverlay(); } }
+}
+function toggleBoards() {
+  if (ov?.kind === 'boards') { ov = null; paused = false; lastDrop = lastDrop.map(() => performance.now()); renderOverlay(); return; }
+  const mine = ov = { kind: 'boards', focus: null, live: null, err: false };
+  paused = true; renderOverlay();
+  Promise.all([fetchBoard('focus'), fetchBoard('live')])
+    .then(([f, l]) => { if (ov === mine) { mine.focus = f; mine.live = l; renderOverlay(); } })
+    .catch(() => { if (ov === mine) { mine.err = true; renderOverlay(); } });
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+function boardHtml(list, mine) {
+  if (!list) return '<p style="color:var(--dim)">LOADING…</p>';
+  let hit = false;
+  const rows = Array.from({ length: 10 }, (_, i) => {
+    const s = list[i];
+    const me = s && mine && !hit && s.initials === mine.initials && s.score === mine.score;
+    if (me) hit = true;
+    const c = me ? ' class="me"' : i === 0 && s ? ' style="color:#ffd60a"' : '';
+    return `<tr${c}><td>${pad(i + 1, 2)}</td><td>${s ? esc(s.initials) : '---'}</td><td>${s ? pad(s.score, 6) : '------'}</td><td>${s ? pad(s.level, 2) : '--'}</td></tr>`;
+  }).join('');
+  return `<table class="board"><tr class="h"><td>NO</td><td>NAME</td><td>SCORE</td><td>LV</td></tr>${rows}</table>`;
+}
+function renderOverlay() {
+  const on = !!ov || paused || over;
+  msg.classList.toggle('on', on);
+  if (!on) { msg.innerHTML = ''; return; }
+  const LB = `<a class="btn" href="/scores" target="_blank" rel="noopener">LEADERBOARD &#8599;</a>`;
+  const AGAIN = `<button class="btn go" data-act="again">PLAY AGAIN</button>`;
+  if (ov?.kind === 'boards') {
+    msg.innerHTML = `<div class="panel"><h1 style="color:#fff">HIGH SCORES</h1>` + (ov.err ? '<p>SCOREBOARD OFFLINE</p>' :
+      `<div class="boards"><div><p class="bt" style="color:#38e07b">FOCUS</p>${boardHtml(ov.focus)}</div>` +
+      `<div><p class="bt" style="color:#ff4d6d">LIVE</p>${boardHtml(ov.live)}</div></div>`) +
+      `<div class="btns"><button class="btn go" data-act="boards">BACK TO GAME</button>${LB}</div></div>`;
+    return;
+  }
+  if (!over) {
+    msg.innerHTML = `<div class="panel"><h1 style="color:#fff">PAUSE</h1>` +
+      `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}</div>` +
+      `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>` +
+      `<p class="hint kbd" style="margin-top:14px">ESC TO RESUME &nbsp; H FOR HIGH SCORES</p></div>`;
+    return;
+  }
+  const o = ov ?? { stage: 'board', mode: runMode() };
+  const head = `<h1>GAME OVER</h1><p>SCORE ${pad(score, 6)} &nbsp; LINES ${pad(lines, 3)}</p>` +
+    (newHi ? `<p style="color:#ffd60a">NEW PERSONAL BEST!</p>` : '');
+  let body = '';
+  if (o.stage === 'loading' || o.stage === 'sending') body = `<p style="color:var(--dim)">${o.stage === 'loading' ? 'CHECKING THE BOARD…' : 'SENDING…'}</p>`;
+  else if (o.stage === 'entry') body =
+    `<p style="color:#ffd60a;margin-top:16px">YOU MADE THE ${o.mode.toUpperCase()} TOP 10!</p><p>ENTER YOUR INITIALS</p>` +
+    `<div class="initials">${o.initials.map((ch, i) =>
+      `<div class="ini"><button class="btn tch" data-act="up" data-i="${i}">&#9650;</button>` +
+      `<span class="${i === o.cursor ? 'cur' : ''}">${esc(ch)}</span>` +
+      `<button class="btn tch" data-act="down" data-i="${i}">&#9660;</button></div>`).join('')}</div>` +
+    (o.err ? `<p style="color:#ff4d6d">${o.err}</p>` : '') +
+    `<div class="btns"><button class="btn go" data-act="save">SAVE</button><button class="btn" data-act="skip">SKIP</button></div>` +
+    `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
+  else if (o.stage === 'offline') body = `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>`;
+  else body = `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
+    (o.board ? boardHtml(o.board, o.mine) : '') + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
+  msg.innerHTML = `<div class="panel">${head}${body}</div>`;
+}
+
+// ── Loop ─────────────────────────────────────────────────────────────────────
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused && !over) {
+    for (let f = 0; f < 4; f++) {
+      if (f !== active && !live) continue;
+      const iv = f === active ? interval() : interval() * 2;
+      if (now - lastDrop[f] >= iv) { lastDrop[f] = now; if (!tryMove(f, 0, -1)) lock(f); }
+    }
+  }
+  rotVel += ((rotTarget - tower.rotation.y) * 190 - rotVel * 21) * dt;   // a little overshoot
+  tower.rotation.y += rotVel * dt;
+  faceFlash = Math.max(0, faceFlash - dt * 2.5);
+  edgeGlow = Math.max(0, edgeGlow - dt * 1.2);
+  shake = Math.max(0, shake - dt * 3);
+  camera.position.set(40 + (Math.random() - .5) * shake, 40 + (Math.random() - .5) * shake, 40 + (Math.random() - .5) * shake);
+  bgPulse = Math.max(0, bgPulse - dt * 0.8);
+  scene.background.setHex(0x0b0e14).lerp(col.setHex(FACE_COLORS[active]), 0.18 * bgPulse);
+  fx.update(dt);
+  drawTower();
+  drawNet();
+  drawHud();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+resize();
+reset();
+requestAnimationFrame(frame);
+window.__tc = { get grid() { return grid; }, get actives() { return actives; }, ringCol, clearRows, W, H, S, RING };
+</script>
+</body>
+</html>

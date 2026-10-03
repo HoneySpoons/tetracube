@@ -1,0 +1,8 @@
+name = "tetracube"
+pages_build_output_dir = "public"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tetracube"
+database_id = "1b9ed3ee-d8a2-4aa9-b042-2c9e473beadc"
