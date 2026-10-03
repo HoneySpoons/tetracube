@@ -1,8 +1,25 @@
 # Tetracube
 
+Play it at **[tetracube.fun](https://tetracube.fun)** · high scores at [tetracube.fun/scores](https://tetracube.fun/scores)
+
 Four games of Tetris wrapped around one isometric cube. Each face's edge column is its
 neighbour's edge column, so a clear on one face drops the shared corners and can complete
 rows on the faces beside it: cascades.
+
+## How to play
+
+| | keyboard | touch |
+|---|---|---|
+| pick a face | A S D F | the coloured buttons |
+| move | ← → | swipe |
+| rotate | ↑ or X (Z rotates back) | tap (swipe up rotates back) |
+| soft / hard drop | ↓ / space | drag down / flick down |
+| live mode | L, before your first piece lands | LIVE button |
+| pause, controls | Esc | II |
+
+In **focus** mode only the face you're on falls. In **live** mode all four fall, the ones you aren't watching at half speed, and your score goes on the separate Live board.
+
+## What's in here
 
 - `public/index.html`: the game (Three.js, synthesized sound, keyboard + touch)
 - `public/scores.html`: the live leaderboard (`/scores`)
@@ -29,3 +46,10 @@ A three-letter filter can't catch everything. To remove a score from the live bo
     npx wrangler d1 execute tetracube --remote --command "DELETE FROM scores WHERE initials='XXX'"
 
 To see what's there first: `--command "SELECT id, initials, score, mode, created_at FROM scores ORDER BY id DESC LIMIT 20"`.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Fork it, mod it, make a five-sided one.
+
+Three.js (`public/vendor/three.module.min.js`) is MIT, © three.js authors. The font is
+[Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P) (SIL Open Font License), loaded from Google Fonts.
