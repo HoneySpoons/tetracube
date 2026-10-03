@@ -93,12 +93,24 @@
     color: var(--glow, #fff); opacity: 0; white-space: nowrap; letter-spacing: 3px;
     text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; }
   #pop.go { animation: pop 1.2s steps(1, end) forwards, blink .12s steps(2, start) 6; }
-  #pop.cube { font-size: min(52px, 9.5vw); letter-spacing: 2px;            /* TETRACUBE!, and nothing else */
-    animation: cubePop 2.2s steps(1, end) forwards, cubeHue .5s steps(4, end) 4; }
+  #pop.cube { font-size: min(52px, 8.6vw); letter-spacing: 2px;            /* TETRACUBE!, and nothing else */
+    animation: cubePop 3s steps(1, end) forwards, cubeHue .75s steps(4, end) 4; }
   @keyframes cubePop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(2.2); } 6% { transform: translate(-50%,-50%) scale(1); }
     12% { transform: translate(-50%,-50%) scale(1.15); } 18% { transform: translate(-50%,-50%) scale(1); }
     85% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
   @keyframes cubeHue { to { filter: hue-rotate(360deg); } }
+  @media (max-width: 480px) {                        /* a phone has no room to scale the banner up: it drops in and bounces instead */
+    #pop.cube { animation-name: cubeDrop, cubeHue; }
+    @keyframes cubeDrop { 0% { opacity: 1; transform: translate(-50%,-140%); } 6% { transform: translate(-50%,-50%); }
+      12% { transform: translate(-50%,-38%); } 18% { transform: translate(-50%,-50%); }
+      85% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
+  }
+  @keyframes popCalm { 0%, 85% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
+  @media (prefers-reduced-motion: reduce) {          /* banners still show: no scale pops, colour blinks or hue cycling */
+    #pop.go { animation: popCalm 1.2s steps(1, end) forwards; }
+    #pop.cube { animation: popCalm 3s steps(1, end) forwards; }
+    #msg .blink, table.board tr.me td, .initials span.cur, #coin .c { animation: none; }
+  }
   @keyframes pop { 0% { opacity: 1; transform: translate(-50%,-50%) scale(1.4); } 8% { transform: translate(-50%,-50%) scale(1); }
     80% { opacity: 1; transform: translate(-50%,-50%); } 100% { opacity: 0; transform: translate(-50%,-50%); } }
   @keyframes blink { to { color: #fff; } }
@@ -650,7 +662,7 @@ function setActive(f, snap = false) {
   d = Math.atan2(Math.sin(d), Math.cos(d));
   rotTarget += d;
   if (snap) { tower.rotation.y = rotSpring = rotTarget; rotVel = 0; }
-  else if (d) { sfx.swoosh(d); faceFlash = 1; }
+  else if (d) { sfx.swoosh(d); if (!calm()) faceFlash = 1; }
 }
 
 const isCompact = () => innerWidth <= 760 || (matchMedia('(pointer: coarse)').matches && innerWidth <= 1180);
@@ -748,6 +760,18 @@ const sfx = (() => {
 const WHITE = new THREE.Color(0xffffff);
 const lockGlow = new Map();
 let shake = 0, edgeGlow = 0, bgPulse = 0;
+// Photosensitivity (WCAG 2.3.1: no more than 3 flashes a second over a large area). Every effect here
+// is a single swell-and-fade, never a strobe: the camera shake is one damped 2 Hz thump, not per-frame
+// jitter, and debris is sparse. AUD's flash4.mjs measures it. With prefers-reduced-motion: reduce,
+// nothing flashes, floods, shakes or spins, debris is a light trace, and banners and sound stay.
+const calmQuery = matchMedia('(prefers-reduced-motion: reduce)');
+const calm = () => calmQuery.matches;
+let shakePh = 0; const shakeDir = new THREE.Vector3(1, 0, -1).normalize();
+function kick(a) {
+  if (calm()) return;
+  if (shake < 0.05) { shakePh = 0; shakeDir.set(rnd(1), rnd(0.5), rnd(1)).normalize(); }   // a fresh thump, a fresh direction
+  shake = Math.min(1.4, shake + a);
+}
 const NORMALS = [[0, 0, 1], [1, 0, 0], [0, 0, -1], [-1, 0, 0]];
 const PMAX = 1400;
 const debris = new THREE.InstancedMesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), new THREE.MeshLambertMaterial(), PMAX);
@@ -769,16 +793,19 @@ const quat = new THREE.Quaternion(), eul = new THREE.Euler(), pos = new THREE.Ve
 const cellPos = (c, r) => { const [x, z] = colXZ(c); return [x, Y0 + r + 0.5, z]; };
 const rnd = (a = 1) => (Math.random() - 0.5) * 2 * a;
 function addPart(x, y, z, vx, vy, vz, color, life) {
+  if (calm()) { if (Math.random() > 0.2) return; vx *= 0.4; vy *= 0.4; vz *= 0.4; }   // reduced motion: a light, slow trace
   if (parts.length >= PMAX) parts.shift();
   parts.push({ x, y, z, vx, vy, vz, color, life, age: 0, rx: rnd(3), ry: rnd(3), sx: rnd(9), sy: rnd(9) });
 }
 function addGlow(x, y, z, color, life, gain, s0 = 1, grow = 0.6) {
+  if (calm()) return;
   if (glows.length >= PMAX) glows.shift();
   glows.push({ x, y, z, color, life, gain, s0, grow, age: 0 });
 }
 const pop = document.getElementById('pop');
+const SPIN = [300 / 3000, 2300 / 3000];              // the spin's start and end, as fractions of CUBE_MS
 let cubeAt = -1e9;                                   // when the last TETRACUBE! started; the moment runs CUBE_MS
-const CUBE_MS = 2200;
+const CUBE_MS = 3000;                                // 0 banner + sound · 300–2300 ms the spin · 2300 the corner burst · then the faces glow in turn
 function banner(text, wave = 0, color = FACE_COLORS[active]) {
   if (!text || performance.now() - cubeAt < CUBE_MS) return;   // nothing talks over TETRACUBE!
   pop.textContent = text;
@@ -792,13 +819,11 @@ const fx = {
     for (const { c, r, g, type } of gone) {
       const [x, y, z] = cellPos(c, r), [nx, , nz] = NORMALS[g], color = PIECE_COLORS[type] ?? 0xffffff;
       addGlow(x, y, z, 0xffffff, 0.35, 1, 1, 0.7);
-      for (let i = 0; i < 3; i++) {
-        const out = 4 + Math.random() * 7;
-        addPart(x, y, z, nx * out + rnd(2), 3 + Math.random() * 6, nz * out + rnd(2), color, 1 + Math.random() * 0.7);
-      }
+      const out = 4 + Math.random() * 7;                // one fragment per cell: a burst, not a storm
+      addPart(x, y, z, nx * out + rnd(2), 3 + Math.random() * 6, nz * out + rnd(2), color, 1 + Math.random() * 0.7);
     }
-    shake = Math.min(1.4, shake + 0.25 + 0.15 * n + 0.4 * wave);
-    if (wave) edgeGlow = 1;
+    kick(0.25 + 0.15 * n + 0.4 * wave);
+    if (wave && !calm()) edgeGlow = 1;
     sfx.clear(n, wave);
     banner(wave ? `CASCADE ×${wave + 1}` : tetra ? 'TETRA!' : n >= 2 ? `${n} ROWS` : '', wave);
   },
@@ -806,12 +831,12 @@ const fx = {
     const now = performance.now();
     for (const [j, r] of cellsOf(p)) {
       const c = ringCol(f, j);
-      lockGlow.set(c * HT + r, now);
+      if (!calm()) lockGlow.set(c * HT + r, now);
       const [x, y, z] = cellPos(c, r);
       addGlow(x, y, z, PIECE_COLORS[p.type], 0.2, 0.6, 1, 0.25);
     }
     sfx.lock();
-    shake = Math.min(1.4, shake + 0.06);
+    kick(0.06);
   },
   hardDrop(f, from, to, d) {
     if (!d) return;
@@ -824,7 +849,7 @@ const fx = {
       }
     });
     sfx.hard();
-    shake = Math.min(1.4, shake + 0.35);
+    kick(0.35);
   },
   // TETRACUBE!: the tower spins once, each face flashes its colour in turn, sparks fly off all four
   // corner edges, a rainbow banner. Nothing pauses and no input is blocked; the spin is view-only.
@@ -833,27 +858,36 @@ const fx = {
     pop.innerHTML = [...'TETRACUBE!'].map((ch, i) => `<span style="color:${hex(Object.values(PIECE_COLORS)[i % 7])}">${ch}</span>`).join('');
     pop.style.fontSize = ''; pop.style.setProperty('--glow', '#fff');
     pop.classList.remove('go', 'cube'); void pop.offsetWidth; pop.classList.add('cube');
-    for (const [k, [x, z]] of [[1, 1], [1, -1], [-1, -1], [-1, 1]].entries()) {
-      const cx = x * W / 2, cz = z * W / 2;
-      for (let r = 0; r < H; r += 0.5) {
-        const color = FACE_COLORS[(k + Math.floor(r)) % 4];
-        addPart(cx, Y0 + r, cz, x * (4 + Math.random() * 8), 4 + Math.random() * 10, z * (4 + Math.random() * 8), color, 1.4 + Math.random());
-        if (r % 2 === 0) addGlow(cx, Y0 + r, cz, color, 0.6, 1, 1.2, 1.2);
+    kick(0.5);
+    for (const q of parts) q.life = Math.min(q.life, q.age + 0.4);      // the last clear's debris fades before the spin gets going
+    for (const q of glows) q.life = Math.min(q.life, q.age + 0.3);
+    // The sparks wait for the spin to finish: particles live in the tower's frame, so a spin would sweep
+    // them round the screen in arcs (measured: a strobe over most of it).
+    const at = cubeAt;
+    setTimeout(() => {
+      if (cubeAt !== at || over) return;
+      for (const [k, [x, z]] of [[1, 1], [1, -1], [-1, -1], [-1, 1]].entries()) {   // one spark every 2 rows, drifting
+        const cx = x * W / 2, cz = z * W / 2;
+        for (let r = 1; r < H; r += 2) {
+          const color = FACE_COLORS[(k + r) % 4];
+          addPart(cx, Y0 + r, cz, x * (2 + Math.random() * 4), 2 + Math.random() * 5, z * (2 + Math.random() * 4), color, 1.6 + Math.random());
+          if (r % 4 === 1) addGlow(cx, Y0 + r, cz, color, 0.9, 0.5, 1.2, 0.8);
+        }
       }
-    }
-    shake = 1.4; edgeGlow = 1;
+      kick(0.9); if (!calm()) edgeGlow = 1;
+    }, SPIN[1] * CUBE_MS);
     sfx.cube();
   },
-  levelUp() { sfx.level(); bgPulse = 1; setTimeout(() => banner(`LEVEL ${level()}`, 1, 0xffffff), 450); },
+  levelUp() { sfx.level(); if (!calm()) bgPulse = 1; setTimeout(() => banner(`LEVEL ${level()}`, 1, 0xffffff), 450); },
   over() {
     for (let c = 0; c < RING; c++) for (let r = 0; r < HT; r++) {
       const t = grid[c][r]; if (!t) continue;
       const [x, y, z] = cellPos(c, r);
-      for (let i = 0; i < 2; i++) addPart(x, y, z, x * 0.9 + rnd(3), 2 + Math.random() * 9, z * 0.9 + rnd(3), PIECE_COLORS[t], 2 + Math.random());
+      addPart(x, y, z, x * 0.9 + rnd(3), 2 + Math.random() * 9, z * 0.9 + rnd(3), PIECE_COLORS[t], 2 + Math.random());
       grid[c][r] = null;
     }
     actives.fill(null);
-    shake = 1.6; edgeGlow = 1;
+    kick(1.4); if (!calm()) edgeGlow = 1;
     sfx.over();
   },
   wipe() { parts.length = 0; glows.length = 0; lockGlow.clear(); shake = 0; },
@@ -1119,21 +1153,28 @@ function frame(now) {
   }
   rotVel += ((rotSpring - rotTarget) * -190 - rotVel * 21) * dt;         // a little overshoot
   rotSpring += rotVel * dt;
-  const ct = (now - cubeAt) / CUBE_MS;                                   // TETRACUBE!: one extra turn, eased, view only
-  const spin = ct >= 0 && ct < 0.6 ? 2 * Math.PI * (1 - Math.pow(1 - ct / 0.6, 3)) : 0;
+  const ct = calm() ? -1 : (now - cubeAt) / CUBE_MS;                    // TETRACUBE!: one extra turn, eased in and out, view only
+  const su = (ct - SPIN[0]) / (SPIN[1] - SPIN[0]), spinning = su > 0 && su < 1;
+  // constant speed with short ramps, not a smoothstep: a turn sweeps each falling piece past the same
+  // pixels, so the peak speed sets the flash rate (4 pieces in ~1.75 s ≈ 2.3/s)
+  const RA = 0.125, VM = 1 / (1 - RA);
+  const spin = !spinning ? 0 : 2 * Math.PI * (su < RA ? VM * su * su / (2 * RA) : su < 1 - RA ? VM * (RA / 2 + su - RA) : 1 - VM * (1 - su) ** 2 / (2 * RA));
   tower.rotation.y = rotSpring + spin;
   faceFlash = Math.max(0, faceFlash - dt * 2.5);
   edgeGlow = Math.max(0, edgeGlow - dt * 1.2);
   shake = Math.max(0, shake - dt * 3);
-  camera.position.set(40 + (Math.random() - .5) * shake, 40 + (Math.random() - .5) * shake, 40 + (Math.random() - .5) * shake);
+  shakePh += dt * 2 * Math.PI * 2;                                       // one damped 2 Hz thump, never a strobe
+  const so = 0.35 * shake * Math.sin(shakePh);
+  camera.position.set(40 + so * shakeDir.x, 40 + so * shakeDir.y, 40 + so * shakeDir.z);
   bgPulse = Math.max(0, bgPulse - dt * 0.8);
   scene.background.setHex(0x0b0e14).lerp(col.setHex(FACE_COLORS[active]), 0.18 * bgPulse);
   fx.update(dt);
   drawTower();
-  if (ct >= 0 && ct < 1) {                                               // the faces flash in turn, twice round
-    const k = Math.floor(ct * 8) % 4;
-    scene.background.lerp(col.setHex(FACE_COLORS[k]), 0.3 * (1 - ct));
-    faceLines[k].material.opacity = 1;
+  if (ct >= 0 && ct < SPIN[1]) faceLines.forEach(l => { l.material.opacity = 0.05; });   // around the spin, grid lines stay dim, or the turn sweeps them past every pixel like a strobe
+  else if (ct >= SPIN[1] && ct < 1) {                                    // settled: each face glows once in turn, and fades
+    const step = (ct - SPIN[1]) / (1 - SPIN[1]) * 4, k = Math.floor(step) % 4, fade = 1 - (step - Math.floor(step));
+    scene.background.lerp(col.setHex(FACE_COLORS[k]), 0.15 * fade);
+    faceLines[k].material.opacity = Math.max(faceLines[k].material.opacity, 0.15 + 0.5 * fade);
   }
   drawNet();
   drawHud();

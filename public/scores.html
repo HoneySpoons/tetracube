@@ -54,6 +54,7 @@
   #hof { margin-top: 34px; display: flex; justify-content: center; }
   #hof[hidden] { display: none; }
   #hof .panel { min-width: 300px; }
+  @media (prefers-reduced-motion: reduce) { .dot, tr.new td { animation: none; } }
   footer { max-width: 860px; margin: 0 auto; padding: 0 14px 34px; text-align: center; color: var(--dim); font-size: 9px; line-height: 2.4; }
   footer a { color: var(--ink); text-decoration: none; margin: 0 6px; white-space: nowrap; } footer a:hover { color: #ffd60a; }
   @media (max-width: 560px) { h1 { font-size: 22px; } .panel { min-width: 0; width: 100%; box-sizing: border-box; } td { padding: 4px 6px; } }
