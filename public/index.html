@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07080d">
 <meta name="description" content="Tetracube: four games of Tetris wrapped around one cube. The corners are shared.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -64,6 +67,7 @@
     box-shadow: 3px 3px 0 #3b3f55; }
   .btn:hover, .btn:active { background: #fff; color: #000; }
   .btn.go { border-color: #38e07b; color: #38e07b; } .btn.go:hover, .btn.go:active { background: #38e07b; color: #000; }
+  .btn.warn { border-color: #ff4d6d; color: #ff4d6d; } .btn.warn:hover, .btn.warn:active { background: #ff4d6d; color: #000; }
   .btns { margin-top: 14px; }
   .ini { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .ini .btn { margin: 0; padding: 6px 12px 4px; font-size: 10px; box-shadow: none; }
@@ -129,6 +133,7 @@
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 <script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
+<script data-goatcounter="https://tetracube.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <div id="title"></div>
@@ -187,6 +192,7 @@ const cellsOf = p => rotCells(p.type, p.rot).map(([x, y]) => [p.x + x, p.y + y])
 let grid, actives, bags, lastDrop, active, score, lines, live, paused, over, flash;
 // A run is ranked LIVE only if live mode was on before the first lock and never turned off.
 let locks = 0, rankedLive = false, runStart = 0;
+let armed = false;          // the pause menu's RESTART takes two taps; this is the first
 const runMode = () => rankedLive ? 'live' : 'focus';
 
 function reset() {
@@ -196,7 +202,7 @@ function reset() {
   bags = [[], [], [], []];
   lastDrop = [0, 0, 0, 0];
   active = 0; score = 0; lines = 0; live = false; paused = false; over = false; flash = ''; newHi = false;
-  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; renderOverlay();
+  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; renderOverlay();
   for (let f = 0; f < 4; f++) spawn(f);
   setActive(0, true);
 }
@@ -354,7 +360,7 @@ function toggleLive() {
 }
 function togglePause() {
   if (over || ov) return;
-  paused = !paused;
+  paused = !paused; armed = false;
   if (!paused) lastDrop = lastDrop.map(() => performance.now());
   renderOverlay();
 }
@@ -422,6 +428,7 @@ addEventListener('click', e => {
   else if (act === 'live' && playable()) toggleLive();
   else if (act === 'pause' || act === 'resume') togglePause();
   else if (act === 'again') reset();
+  else if (act === 'restart' && paused && !ov) { if (armed) reset(); else { armed = true; sfx.rotate(); renderOverlay(); } }
   else if (act === 'boards') toggleBoards();
   else if (ov?.stage === 'entry') {
     if (act === 'up' || act === 'down') {
@@ -854,6 +861,7 @@ async function submit(o) {
   } catch { if (ov === o) { o.stage = 'offline'; renderOverlay(); } }
 }
 function toggleBoards() {
+  armed = false;
   if (ov?.kind === 'boards') {
     paused = ov.wasPaused; ov = null;
     if (!paused) lastDrop = lastDrop.map(() => performance.now());
@@ -905,7 +913,9 @@ function renderOverlay() {
   }
   if (!over) {
     msg.innerHTML = `<div class="panel"><h1 style="color:#fff">PAUSE</h1>` +
-      `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}</div>` +
+      `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}` +
+      (armed ? `<button class="btn warn" data-act="restart">SURE? ${document.body.classList.contains('touch') ? 'TAP' : 'CLICK'} AGAIN</button>`
+             : `<button class="btn" data-act="restart">RESTART</button>`) + `</div>` +
       controlsHtml() +
       (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) + `</div>`;
     return;
