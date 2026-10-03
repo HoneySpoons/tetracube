@@ -111,6 +111,9 @@
   #msg .blink { animation: blinkTxt 1s steps(2, start) infinite; color: #ffd60a; margin-top: 18px; }
   @keyframes blinkTxt { to { visibility: hidden; } }
   html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+  canvas, #hud, #title, #net, #touchbar, #pop, #msg { touch-action: none; -webkit-touch-callout: none; }   /* iOS: no double-tap zoom on the game */
+  button, a, .btn { touch-action: manipulation; }                                                       /* taps click at once, never zoom */
+  #msg .panel { touch-action: pan-y; }                                                                   /* a tall panel still scrolls */
   #msg .panel { pointer-events: auto; max-width: 92vw; max-height: 88vh; overflow: auto; box-sizing: border-box; }
   .btn { display: inline-block; font: inherit; font-size: 9px; color: #fff; background: #000; cursor: pointer;
     border: 3px solid #fff; padding: 10px 12px 8px; margin: 6px 4px 0; text-decoration: none; touch-action: manipulation;
@@ -489,15 +492,30 @@ addEventListener('pointerup', e => {
 });
 addEventListener('pointercancel', () => { tp = null; });
 
+// iOS Safari ignores user-scalable=no / maximum-scale, so on this page a double tap zoomed in and a
+// pinch did too, with no way back out mid-game. Game page only: /scores and /about stay zoomable.
+// touch-action (CSS above) covers most of it; these cover what iOS still lets through.
+if (matchMedia('(pointer: coarse)').matches) {
+  const stop = e => e.preventDefault();
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend', 'dblclick']) document.addEventListener(t, stop, { passive: false });
+  let lastEnd = 0;                               // a second touchend inside 300 ms is a double tap: cancel its zoom,
+  document.addEventListener('touchend', e => {   // except on buttons and links, which must still click
+    const now = e.timeStamp;
+    if (now - lastEnd < 300 && !(e.target instanceof Element && e.target.closest('button, a, input'))) e.preventDefault();
+    lastEnd = now;
+  }, { passive: false });
+  // and if a zoom gets through anyway, re-assert the viewport, which makes iOS snap back to 1×
+  const vm = document.querySelector('meta[name=viewport]'), vmContent = vm.content;
+  visualViewport?.addEventListener('resize', () => {
+    if (visualViewport.scale <= 1.01) return;
+    vm.content = vmContent + ',minimum-scale=1';
+    requestAnimationFrame(() => { vm.content = vmContent; });
+  });
+}
+
 // every on-screen button routes through here
 addEventListener('click', e => {
-  if (e.target === net) {                      // the net is the face picker: tap a board
-    const r = net.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * (4 * W * CELL + 3 * GAP);
-    const f = Math.max(0, Math.min(3, Math.floor((x + GAP / 2) / (W * CELL + GAP))));
-    sfx.init();
-    if (playable() && f !== active) setActive(f);
-    return;
-  }
+  if (e.target === net) return;               // the net picks faces on pointerup, below
   if (trap && e.detail > 0 && e.target instanceof Element && e.target.closest('#msg a')) { trap(); return; }   // links open a new tab
   const b = e.target instanceof Element && e.target.closest('[data-act]'); if (!b) return;
   sfx.init();
@@ -695,8 +713,10 @@ const sfx = (() => {
   }
   return {
     init() {
-      if (!ctx) { ctx = new AudioContext(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); }
-      if (ctx.state === 'suspended') ctx.resume();
+      try {                                      // no audio device (or a refusal) means silence, never an error
+        if (!ctx) { ctx = new AudioContext(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); }
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      } catch { ctx = null; }
     },
     toggle() { muted = !muted; return muted; },
     get muted() { return muted; },
@@ -870,6 +890,21 @@ const fx = {
 
 // ── The net: all four faces unfolded, corners repeated on both sides ─────────
 const net = document.getElementById('net'), nx = net.getContext('2d');
+
+// The net is the face picker: tap a board. Handled on the net's own pointerup, not via click,
+// because iOS Safari (WebKit) never synthesises a click on a canvas from a tap: the tap ends at
+// pointerup/touchend and the board never changed. A tap = under 12 px of travel and 600 ms.
+let netDown = null;
+net.addEventListener('pointerdown', e => { netDown = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }; });
+net.addEventListener('pointercancel', () => { netDown = null; });
+net.addEventListener('pointerup', e => {
+  const d = netDown; netDown = null;
+  if (!d || d.id !== e.pointerId || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || performance.now() - d.t > 600) return;
+  const r = net.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * (4 * W * CELL + 3 * GAP);
+  const f = Math.max(0, Math.min(3, Math.floor((x + GAP / 2) / (W * CELL + GAP))));
+  sfx.init();
+  if (playable() && f !== active) setActive(f);
+});
 const CELL = 7, GAP = 14;
 net.width = (4 * W * CELL + 3 * GAP) * devicePixelRatio;
 net.height = (H * CELL + 18) * devicePixelRatio;
