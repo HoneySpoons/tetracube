@@ -72,6 +72,7 @@
   #touchbar { display: none; position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom));
     justify-content: center; gap: 8px; z-index: 8; }
   body.touch #touchbar { display: flex; }
+  body.touch #net { bottom: calc(80px + env(safe-area-inset-bottom)); }
   #touchbar button { font: inherit; font-size: 9px; min-width: 50px; height: 52px; background: #000; color: #fff;
     border: 3px solid #555a70; touch-action: manipulation; }
   #touchbar button.face { border-color: var(--fc); color: var(--fc); font-size: 12px; }
@@ -114,7 +115,8 @@
   #coin:hover { background: #ffd60a; color: #000; }
   #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
 </style>
-<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
+<script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
 </head>
 <body>
 <div id="title"></div>
@@ -130,6 +132,7 @@
 <canvas id="net"></canvas>
 <div id="msg"></div>
 <div id="pop"></div>
+<input id="keytrap" aria-hidden="true" tabindex="-1" autocomplete="off" style="position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;border:0;padding:0">
 <div id="touchbar">
   <button data-act="live" id="tb-live">LIVE</button>
   <button data-act="face" data-f="0" class="face" style="--fc:#4cc9f0">A</button>
@@ -348,6 +351,17 @@ function togglePause() {
   renderOverlay();
 }
 const playable = () => !over && !paused && !ov;
+
+// Keyboard extensions (Vimium: F = link hints, D = scroll) leave the page alone
+// while a text field has focus, so on desktop a hidden one keeps it.
+const keytrap = document.getElementById('keytrap');
+if (!document.body.classList.contains('touch') && !matchMedia('(pointer: coarse)').matches) {
+  const trap = () => { if (document.activeElement !== keytrap) keytrap.focus({ preventScroll: true }); };
+  keytrap.addEventListener('blur', () => setTimeout(trap, 0));
+  keytrap.addEventListener('input', () => { keytrap.value = ''; });
+  addEventListener('mousedown', e => { if (!(e.target instanceof Element && e.target.closest('a, button'))) setTimeout(trap, 0); });
+  trap();
+}
 
 // ── Touch: swipe to move, tap to rotate, flick down to drop ─────────────────
 if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
@@ -804,8 +818,12 @@ async function submit(o) {
   } catch { if (ov === o) { o.stage = 'offline'; renderOverlay(); } }
 }
 function toggleBoards() {
-  if (ov?.kind === 'boards') { ov = null; paused = false; lastDrop = lastDrop.map(() => performance.now()); renderOverlay(); return; }
-  const mine = ov = { kind: 'boards', focus: null, live: null, err: false };
+  if (ov?.kind === 'boards') {
+    paused = ov.wasPaused; ov = null;
+    if (!paused) lastDrop = lastDrop.map(() => performance.now());
+    renderOverlay(); return;
+  }
+  const mine = ov = { kind: 'boards', focus: null, live: null, err: false, wasPaused: paused };
   paused = true; renderOverlay();
   Promise.all([fetchBoard('focus'), fetchBoard('live')])
     .then(([f, l]) => { if (ov === mine) { mine.focus = f; mine.live = l; renderOverlay(); } })
@@ -820,7 +838,7 @@ function boardHtml(list, mine) {
     const me = s && mine && !hit && s.initials === mine.initials && s.score === mine.score;
     if (me) hit = true;
     const c = me ? ' class="me"' : i === 0 && s ? ' style="color:#ffd60a"' : '';
-    return `<tr${c}><td>${pad(i + 1, 2)}</td><td>${s ? esc(s.initials) : '---'}</td><td>${s ? pad(s.score, 6) : '------'}</td><td>${s ? pad(s.level, 2) : '--'}</td></tr>`;
+    return `<tr${c}><td>${pad(i + 1, 2)}</td><td>${s ? esc(s.initials) : '---'}</td><td>${s ? pad(Number(s.score) | 0, 6) : '------'}</td><td>${s ? pad(Number(s.level) | 0, 2) : '--'}</td></tr>`;
   }).join('');
   return `<table class="board"><tr class="h"><td>NO</td><td>NAME</td><td>SCORE</td><td>LV</td></tr>${rows}</table>`;
 }
@@ -852,7 +870,7 @@ function renderOverlay() {
   if (!over) {
     msg.innerHTML = `<div class="panel"><h1 style="color:#fff">PAUSE</h1>` +
       `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}</div>` +
-      `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>` +
+      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) +
       controlsHtml() + `</div>`;
     return;
   }
@@ -871,6 +889,7 @@ function renderOverlay() {
     `<div class="btns"><button class="btn go" data-act="save">SAVE</button><button class="btn" data-act="skip">SKIP</button></div>` +
     `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
   else if (o.stage === 'offline') body = `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>`;
+  else if (!o.board) body = `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
   else body = `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
     (o.board ? boardHtml(o.board, o.mine) : '') + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>`;
   msg.innerHTML = `<div class="panel">${head}${body}</div>`;
@@ -906,7 +925,10 @@ function frame(now) {
 resize();
 reset();
 requestAnimationFrame(frame);
-window.__tc = { get grid() { return grid; }, get actives() { return actives; }, ringCol, clearRows, W, H, S, RING };
+window.__booted = true;
+// test hook, local dev only
+if (['127.0.0.1', 'localhost'].includes(location.hostname))
+  window.__tc = { get grid() { return grid; }, get actives() { return actives; }, ringCol, clearRows, W, H, S, RING };
 </script>
 </body>
 </html>

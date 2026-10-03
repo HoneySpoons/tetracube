@@ -21,3 +21,11 @@ rows on the faces beside it: cascades.
 
 `IP_SALT` is a Pages secret (`wrangler pages secret put IP_SALT --project-name tetracube`).
 The API stores a salted hash of the client address for rate limiting, never the address.
+
+## Moderation
+
+A three-letter filter can't catch everything. To remove a score from the live board:
+
+    npx wrangler d1 execute tetracube --remote --command "DELETE FROM scores WHERE initials='XXX'"
+
+To see what's there first: `--command "SELECT id, initials, score, mode, created_at FROM scores ORDER BY id DESC LIMIT 20"`.

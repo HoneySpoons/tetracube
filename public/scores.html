@@ -62,7 +62,7 @@ function table(mode, list) {
     const cls = !s ? '' : i === 0 ? 'first' : '';
     const fresh = s && known && !known.has(key(s)) ? ' new' : '';
     return `<tr class="${cls}${fresh}"><td>${pad(i + 1, 2)}</td><td>${s ? esc(s.initials) : '---'}</td>` +
-      `<td>${s ? pad(s.score, 6) : '------'}</td><td>${s ? pad(s.lines, 3) : '---'}</td><td>${s ? pad(s.level, 2) : '--'}</td></tr>`;
+      `<td>${s ? pad(Number(s.score) | 0, 6) : '------'}</td><td>${s ? pad(Number(s.lines) | 0, 3) : '---'}</td><td>${s ? pad(Number(s.level) | 0, 2) : '--'}</td></tr>`;
   }).join('');
   seen[mode] = new Set(list.map(key));
   return `<table><tr class="h"><td>NO</td><td>NAME</td><td>SCORE</td><td>LINES</td><td>LV</td></tr>${rows}</table>`;
