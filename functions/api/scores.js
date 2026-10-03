@@ -48,6 +48,12 @@ export async function onRequestGet({ request, env }) {
   return json({ mode, scores: results }, 200, { 'cache-control': 'no-store' });
 }
 
+// HEAD answers like GET (uptime checkers use it), headers only
+export async function onRequestHead(ctx) {
+  const r = await onRequestGet(ctx);
+  return new Response(null, { status: r.status, headers: r.headers });
+}
+
 export async function onRequestPost({ request, env }) {
   // JSON only: an HTML form can't send it without a CORS preflight, so other sites can't post for their visitors
   if (!(request.headers.get('content-type') ?? '').startsWith('application/json')) return json({ error: 'json' }, 415);
