@@ -906,8 +906,8 @@ function renderOverlay() {
   if (!over) {
     msg.innerHTML = `<div class="panel"><h1 style="color:#fff">PAUSE</h1>` +
       `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}</div>` +
-      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) +
-      controlsHtml() + `</div>`;
+      controlsHtml() +
+      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) + `</div>`;
     return;
   }
   const o = ov ?? { stage: 'board', mode: runMode() };
