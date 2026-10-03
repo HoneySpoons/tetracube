@@ -116,7 +116,7 @@
   #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
-<script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
+<script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
 </head>
 <body>
 <div id="title"></div>
@@ -357,7 +357,10 @@ const playable = () => !over && !paused && !ov;
 const keytrap = document.getElementById('keytrap');
 if (!document.body.classList.contains('touch') && !matchMedia('(pointer: coarse)').matches) {
   const trap = () => { if (document.activeElement !== keytrap) keytrap.focus({ preventScroll: true }); };
-  keytrap.addEventListener('blur', () => setTimeout(trap, 0));
+  // refocus only when focus fell to nothing, so Tab can still reach the overlay's links and buttons
+  keytrap.addEventListener('blur', () => setTimeout(() => {
+    if (!document.activeElement || document.activeElement === document.body) trap();
+  }, 0));
   keytrap.addEventListener('input', () => { keytrap.value = ''; });
   addEventListener('mousedown', e => { if (!(e.target instanceof Element && e.target.closest('a, button'))) setTimeout(trap, 0); });
   trap();
@@ -926,6 +929,7 @@ resize();
 reset();
 requestAnimationFrame(frame);
 window.__booted = true;
+document.getElementById('bootfail')?.remove();   // a slow load can finish after the 8 s message
 // test hook, local dev only
 if (['127.0.0.1', 'localhost'].includes(location.hostname))
   window.__tc = { get grid() { return grid; }, get actives() { return actives; }, ringCol, clearRows, W, H, S, RING };
