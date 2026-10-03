@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "include": [
+    "/",
+    "/about",
+    "/scores",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/llms.txt",
+    "/api/*"
+  ],
+  "exclude": []
+}

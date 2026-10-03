@@ -45,7 +45,8 @@ def svg():
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">'
             f'<rect width="16" height="16" fill="{BG}"/>' + ''.join(runs) + '</svg>\n')
 
-out = Path(__file__).resolve().parent.parent / 'public'
-(out / 'favicon.svg').write_text(svg())
-image(2).save(out / 'favicon.ico', sizes=[(16, 16), (32, 32)], append_images=[image(1)])
-image(10, pad=10).save(out / 'apple-touch-icon.png', optimize=True)   # 160 + 2·10 = 180
+if __name__ == '__main__':                            # tools/og.py imports the grid
+    out = Path(__file__).resolve().parent.parent / 'public'
+    (out / 'favicon.svg').write_text(svg())
+    image(2).save(out / 'favicon.ico', sizes=[(16, 16), (32, 32)], append_images=[image(1)])
+    image(10, pad=10).save(out / 'apple-touch-icon.png', optimize=True)   # 160 + 2·10 = 180

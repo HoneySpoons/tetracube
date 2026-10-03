@@ -1,0 +1,26 @@
+# Tetracube
+
+> Tetracube is a free falling-block puzzle you play in the browser at https://tetracube.fun. Four boards wrap around the sides of one isometric cube, and neighbouring boards share their corner columns, so a clear on one face can set off clears on the faces beside it.
+
+Each face is 10 columns wide and 16 rows tall. The last column of one face is the first column of the next, so the tower is a ring of 36 columns. Clearing a row removes its two corner cells, which also belong to the neighbouring faces; their columns drop, and if that completes a row next door it clears too. That chain is a cascade, and each wave multiplies its score (×2, ×3, …). In Focus mode only the face you are looking at falls; in Live mode all four fall, the unwatched ones at half speed. There are two leaderboards, Focus and Live.
+
+Controls. Keyboard: A S D F pick a face, ← → move, ↑ or X rotate, Z rotates back, ↓ soft drop, Space hard drop, L live mode, Esc or P pause, R restart, H high scores, M sound. Touch (phones, tablets, foldables): swipe to move, tap to rotate, swipe up to rotate back, drag down to soft drop, flick down to hard drop, tap a board in the map at the bottom to switch faces.
+
+It is free, has no ads and needs no account. The source is open under the MIT license. It was made by HoneySpoons in one evening in October 2026.
+
+## Play
+
+- [Tetracube](https://tetracube.fun/): the game
+- [High scores](https://tetracube.fun/scores): the live Focus and Live boards
+- [About](https://tetracube.fun/about): how the corners work, controls, FAQ, how it was made
+
+## Source
+
+- [GitHub: HoneySpoons/tetracube](https://github.com/HoneySpoons/tetracube): MIT license
+
+## More by HoneySpoons
+
+- [kuramoto.dev](https://kuramoto.dev): a small interactive study of emergence, oscillation and coupled systems
+- [CHANGELOG](https://changelog.systems): the field-to-office log for builders
+- [GitHub](https://github.com/HoneySpoons)
+- [Buy Me a Coffee](https://buymeacoffee.com/HoneySpoons)

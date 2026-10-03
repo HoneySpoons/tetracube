@@ -5,7 +5,51 @@
 <title>Tetracube</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#07080d">
-<meta name="description" content="Tetracube: four games of Tetris wrapped around one cube. The corners are shared.">
+<meta name="description" content="A free falling-block puzzle on four faces of a cube. The faces share their corner columns, so one clear can cascade around the tower. Play in your browser.">
+<link rel="canonical" href="https://tetracube.fun/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tetracube">
+<meta property="og:url" content="https://tetracube.fun/">
+<meta property="og:title" content="Tetracube: a falling-block puzzle on four faces of a cube">
+<meta property="og:description" content="The corners are shared, so one clear can cascade around the tower. Free in your browser.">
+<meta property="og:image" content="https://tetracube.fun/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A pixel-art cube in yellow, cyan and pink beside the word TETRACUBE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tetracube: a falling-block puzzle on four faces of a cube">
+<meta name="twitter:description" content="The corners are shared, so one clear can cascade around the tower. Free in your browser.">
+<meta name="twitter:image" content="https://tetracube.fun/og.png">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "VideoGame",
+ "name": "Tetracube",
+ "url": "https://tetracube.fun/",
+ "description": "A falling-block puzzle wrapped around an isometric cube. Four boards share their corner columns, so a clear on one face can cascade into the faces beside it.",
+ "image": "https://tetracube.fun/og.png",
+ "genre": "Puzzle",
+ "playMode": "SinglePlayer",
+ "gamePlatform": "Web browser",
+ "applicationCategory": "Game",
+ "operatingSystem": "Any",
+ "isAccessibleForFree": true,
+ "offers": {
+  "@type": "Offer",
+  "price": "0",
+  "priceCurrency": "USD"
+ },
+ "author": {
+  "@type": "Person",
+  "name": "HoneySpoons",
+  "url": "https://github.com/HoneySpoons"
+ },
+ "license": "https://opensource.org/licenses/MIT",
+ "sameAs": [
+  "https://github.com/HoneySpoons/tetracube"
+ ]
+}
+</script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -130,6 +174,8 @@
     border: 3px solid #ffd60a; padding: 9px 10px 7px; background: #000; box-shadow: 4px 4px 0 #6b5400; }
   #coin:hover { background: #ffd60a; color: #000; }
   #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
+  #about { display: block; width: max-content; margin: 14px auto 0; color: var(--dim); font-size: 8px; text-decoration: none; }
+  #about:hover { color: #fff; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 <script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
@@ -369,8 +415,9 @@ const playable = () => !over && !paused && !ov;
 // Keyboard extensions (Vimium: F = link hints, D = scroll) leave the page alone
 // while a text field has focus, so on desktop a hidden one keeps it.
 const keytrap = document.getElementById('keytrap');
+let trap = null;                               // desktop only; touch has no trap (no on-screen keyboard)
 if (!document.body.classList.contains('touch') && !matchMedia('(pointer: coarse)').matches) {
-  const trap = () => { if (document.activeElement !== keytrap) keytrap.focus({ preventScroll: true }); };
+  trap = () => { if (document.activeElement !== keytrap) keytrap.focus({ preventScroll: true }); };
   // refocus only when focus fell to nothing, so Tab can still reach the overlay's links and buttons
   keytrap.addEventListener('blur', () => setTimeout(() => {
     if (!document.activeElement || document.activeElement === document.body) trap();
@@ -421,9 +468,19 @@ addEventListener('click', e => {
     if (playable() && f !== active) setActive(f);
     return;
   }
+  if (trap && e.detail > 0 && e.target instanceof Element && e.target.closest('#msg a')) { trap(); return; }   // links open a new tab
   const b = e.target instanceof Element && e.target.closest('[data-act]'); if (!b) return;
   sfx.init();
   const act = b.dataset.act, i = +b.dataset.i;
+  onAct(act, i, b);
+  // Hand focus back to the trap: the pressed button is usually gone (re-rendered), and a button
+  // that survives (ESC MENU) would leave Vimium the keys. A keyboard press on RESTART instead
+  // lands on the new SURE? button, so a second Enter confirms.
+  if (!trap) return;
+  if (e.detail === 0 && act === 'restart' && armed) msg.querySelector('[data-act=restart]')?.focus();
+  else if (e.detail > 0 || document.activeElement === document.body) trap();
+});
+function onAct(act, i, b) {
   if (act === 'face' && playable()) setActive(+b.dataset.f);
   else if (act === 'live' && playable()) toggleLive();
   else if (act === 'pause' || act === 'resume') togglePause();
@@ -439,7 +496,7 @@ addEventListener('click', e => {
     else if (act === 'save') submit(ov);
     else if (act === 'skip') { ov.stage = 'board'; renderOverlay(); }
   }
-});
+}
 
 // ── Scene ────────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -684,7 +741,7 @@ const fx = {
     shake = Math.min(1.4, shake + 0.25 + 0.15 * n + 0.4 * wave);
     if (wave) edgeGlow = 1;
     sfx.clear(n, wave);
-    banner(wave ? `CASCADE ×${wave + 1}` : n >= 4 ? 'TETRIS' : n >= 2 ? `${n} ROWS` : '', wave);
+    banner(wave ? `CASCADE ×${wave + 1}` : n >= 4 ? 'QUAD!' : n >= 2 ? `${n} ROWS` : '', wave);
   },
   lock(f, p) {
     const now = performance.now();
@@ -899,6 +956,10 @@ function controlsHtml() {
     row(`SOUND ${sfx.muted ? 'OFF' : 'ON'}`, k('M')) + row('RESUME', k('ESC')) + `</div>`;
 }
 function renderOverlay() {
+  drawOverlay();
+  if (trap && document.activeElement === document.body) trap();   // the focused button may have been replaced
+}
+function drawOverlay() {
   const on = !!ov || paused || over;
   msg.classList.toggle('on', on);
   if (!on) { msg.innerHTML = ''; return; }
@@ -917,7 +978,8 @@ function renderOverlay() {
       (armed ? `<button class="btn warn" data-act="restart">SURE? ${document.body.classList.contains('touch') ? 'TAP' : 'CLICK'} AGAIN</button>`
              : `<button class="btn" data-act="restart">RESTART</button>`) + `</div>` +
       controlsHtml() +
-      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) + `</div>`;
+      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) +
+      `<a id="about" href="/about" target="_blank" rel="noopener">ABOUT TETRACUBE &#8599;</a></div>`;
     return;
   }
   const o = ov ?? { stage: 'board', mode: runMode() };

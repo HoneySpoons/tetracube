@@ -2,7 +2,7 @@
 
 Play it at **[tetracube.fun](https://tetracube.fun)** · high scores at [tetracube.fun/scores](https://tetracube.fun/scores)
 
-Four games of Tetris wrapped around one isometric cube. Each face's edge column is its
+A falling-block puzzle wrapped around one isometric cube: four boards, one per face. Each face's edge column is its
 neighbour's edge column, so a clear on one face drops the shared corners and can complete
 rows on the faces beside it: cascades.
 
@@ -10,7 +10,7 @@ rows on the faces beside it: cascades.
 
 | | keyboard | touch |
 |---|---|---|
-| pick a face | A S D F | the coloured buttons |
+| pick a face | A S D F | tap a board in the map at the bottom |
 | move | ← → | swipe |
 | rotate | ↑ or X (Z rotates back) | tap (swipe up rotates back) |
 | soft / hard drop | ↓ / space | drag down / flick down |

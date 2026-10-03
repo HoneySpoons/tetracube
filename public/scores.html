@@ -5,6 +5,21 @@
 <title>Tetracube · High Scores</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#07080d">
+<meta name="description" content="Live high scores for Tetracube, the falling-block puzzle on four faces of a cube: the Focus and Live boards, updated every few seconds.">
+<link rel="canonical" href="https://tetracube.fun/scores">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tetracube">
+<meta property="og:url" content="https://tetracube.fun/scores">
+<meta property="og:title" content="Tetracube · High Scores">
+<meta property="og:description" content="The live Focus and Live boards for Tetracube, a falling-block puzzle on four faces of a cube.">
+<meta property="og:image" content="https://tetracube.fun/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A pixel-art cube in yellow, cyan and pink beside the word TETRACUBE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Tetracube · High Scores">
+<meta name="twitter:description" content="The live Focus and Live boards for Tetracube, a falling-block puzzle on four faces of a cube.">
+<meta name="twitter:image" content="https://tetracube.fun/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -36,6 +51,8 @@
   .btn { display: inline-block; margin-top: 30px; color: #38e07b; border: 3px solid #38e07b; padding: 12px 16px 10px;
     text-decoration: none; background: #000; box-shadow: 4px 4px 0 #1d5c37; }
   .btn:hover { background: #38e07b; color: #000; }
+  footer { max-width: 860px; margin: 0 auto; padding: 0 14px 34px; text-align: center; color: var(--dim); font-size: 9px; line-height: 2.4; }
+  footer a { color: var(--ink); text-decoration: none; margin: 0 6px; white-space: nowrap; } footer a:hover { color: #ffd60a; }
   @media (max-width: 560px) { h1 { font-size: 22px; } .panel { min-width: 0; width: 100%; box-sizing: border-box; } td { padding: 4px 6px; } }
 </style>
 <script data-goatcounter="https://tetracube.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -50,6 +67,11 @@
   </div>
   <a class="btn" href="/">PLAY &#9654;</a>
 </main>
+<footer>
+  <a href="/about">ABOUT TETRACUBE</a><br>
+  MORE BY HONEYSPOONS<br>
+  <a href="https://kuramoto.dev">KURAMOTO.DEV</a> &middot; <a href="https://changelog.systems">CHANGELOG</a> &middot; <a href="https://github.com/HoneySpoons">GITHUB</a> &middot; <a href="https://buymeacoffee.com/HoneySpoons">BUY ME A COFFEE &#9749;</a>
+</footer>
 <script>
 const COLORS = ['#00d8ff', '#ffd60a', '#b15cff', '#38e07b', '#ff4d6d', '#3a86ff', '#ff9f1c'];
 document.getElementById('title').innerHTML = [...'TETRACUBE'].map((c, i) => `<span style="color:${COLORS[i % 7]}">${c}</span>`).join('');

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>About Tetracube · a falling-block puzzle on four faces of a cube</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07080d">
+<meta name="description" content="What Tetracube is, how the shared corners and cascades work, the keyboard and touch controls, the leaderboard, and how it was made. Free, open source, MIT.">
+<link rel="canonical" href="https://tetracube.fun/about">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tetracube">
+<meta property="og:url" content="https://tetracube.fun/about">
+<meta property="og:title" content="About Tetracube">
+<meta property="og:description" content="A falling-block puzzle on four faces of a cube. The corners are shared, so one clear can cascade around the tower.">
+<meta property="og:image" content="https://tetracube.fun/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A pixel-art cube in yellow, cyan and pink beside the word TETRACUBE">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="About Tetracube">
+<meta name="twitter:description" content="A falling-block puzzle on four faces of a cube. The corners are shared, so one clear can cascade around the tower.">
+<meta name="twitter:image" content="https://tetracube.fun/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #f4f4f4; --dim: #8a8fa3; --bg: #07080d; }
+  html, body { margin: 0; background: var(--bg); color: #d9dbe3; }
+  body { font: 17px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 18px 48px; }
+  h1, h2, .px { font-family: "Press Start 2P", ui-monospace, monospace; font-weight: normal; -webkit-font-smoothing: none; }
+  h1 { font-size: 30px; letter-spacing: 3px; margin: 8px 0 6px; text-align: center; }
+  h1 span { text-shadow: 4px 4px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; }
+  .sub { text-align: center; color: var(--dim); font-size: 10px; margin: 0 0 30px; line-height: 2; }
+  h2 { font-size: 14px; color: #fff; margin: 40px 0 14px; padding-bottom: 8px; border-bottom: 3px solid #3b3f55; }
+  h3 { font-size: 17px; color: #fff; margin: 22px 0 4px; }
+  p, ul { margin: 0 0 14px; } li { margin: 4px 0; }
+  a { color: #58c4f0; } a:hover { color: #fff; }
+  b { color: #fff; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 14px; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #23263a; vertical-align: top; }
+  th { color: var(--dim); font-weight: normal; font-size: 13px; }
+  kbd { display: inline-block; min-width: 12px; padding: 2px 6px 1px; text-align: center; font: 10px/1.6 "Press Start 2P", monospace;
+    background: #1b1e2b; color: #fff; border: 2px solid #fff; border-right-color: #555a70; border-bottom-color: #555a70; }
+  .play { display: block; width: max-content; margin: 34px auto 0; color: #38e07b; border: 3px solid #38e07b; padding: 13px 18px 11px;
+    text-decoration: none; background: #000; box-shadow: 4px 4px 0 #1d5c37; font-size: 11px; }
+  .play:hover { background: #38e07b; color: #000; }
+  .top { display: flex; justify-content: center; gap: 20px; font-size: 9px; margin-bottom: 8px; }
+  .top a { color: var(--dim); text-decoration: none; } .top a:hover { color: #fff; }
+  footer { max-width: 720px; margin: 0 auto; padding: 22px 18px 40px; border-top: 3px solid #3b3f55; color: var(--dim);
+    font-size: 9px; line-height: 2.4; text-align: center; }
+  footer a { color: var(--ink); text-decoration: none; margin: 0 6px; white-space: nowrap; } footer a:hover { color: #ffd60a; }
+  @media (max-width: 560px) { body { font-size: 16px; } h1 { font-size: 20px; letter-spacing: 2px; } h2 { font-size: 12px; } th, td { padding: 6px 6px; } }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "Is Tetracube free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It is free to play in your browser, with no account, no ads and no download." } },
+    { "@type": "Question", "name": "Does Tetracube work on phones?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. On a phone, tablet or foldable you swipe to move, tap to rotate, flick down to drop, and tap a board in the map at the bottom to switch faces." } },
+    { "@type": "Question", "name": "Is Tetracube open source?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, under the MIT license. The source is at https://github.com/HoneySpoons/tetracube." } },
+    { "@type": "Question", "name": "Is there a leaderboard?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, two: Focus and Live. A run that makes the top ten of its board can be saved with three initials, and https://tetracube.fun/scores shows both boards live." } },
+    { "@type": "Question", "name": "How do I get my score on the Tetracube leaderboard?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Finish a run with a score higher than tenth place on its board, then enter three initials and save. A run counts for the Live board only if Live mode was on before your first piece landed and stayed on." } }
+  ]
+}
+</script>
+<script data-goatcounter="https://tetracube.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</head>
+<body>
+<main>
+  <nav class="top px"><a href="/">PLAY</a><a href="/scores">HIGH SCORES</a><a href="https://github.com/HoneySpoons/tetracube">SOURCE</a></nav>
+  <h1 id="title">TETRACUBE</h1>
+  <p class="sub px">A FALLING-BLOCK PUZZLE ON FOUR FACES OF A CUBE</p>
+
+  <h2>WHAT IT IS</h2>
+  <p>Tetracube is a free falling-block puzzle you play in the browser. It wraps four boards around the sides of one isometric cube, and <b>neighbouring boards share their corner columns</b>, so a clear on one face can set off clears on the faces beside it.</p>
+
+  <h2>HOW THE CORNERS WORK</h2>
+  <p>Each face is 10 columns wide and 16 rows tall. The last column of one face <b>is</b> the first column of the next, so the whole tower is a ring of 36 columns, not 40. A block in a corner column belongs to two boards at once.</p>
+  <p>When you clear a row, its two corner cells go with it. Those cells were also part of the neighbouring faces, so the columns above them drop by one on those faces too. If that drop completes a row next door, it clears as well, which drops more corners, and so on around the cube. That chain is a <b>cascade</b>. Each wave multiplies its score: the second wave scores ×2, the third ×3. Nobody designed the cascades; they fall out of the shared columns.</p>
+  <p>There are two modes. In <b>Focus</b>, only the face you are looking at falls. In <b>Live</b>, all four fall, the ones you aren't watching at half speed. Turn Live on before your first piece lands to play for the Live board.</p>
+
+  <h2>HOW TO PLAY</h2>
+  <table>
+    <tr><th></th><th>Keyboard</th><th>Touch</th></tr>
+    <tr><td>Pick a face</td><td><kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd></td><td>Tap a board in the map at the bottom</td></tr>
+    <tr><td>Move</td><td><kbd>&larr;</kbd> <kbd>&rarr;</kbd></td><td>Swipe left or right</td></tr>
+    <tr><td>Rotate</td><td><kbd>&uarr;</kbd> or <kbd>X</kbd>; <kbd>Z</kbd> rotates back</td><td>Tap; swipe up rotates back</td></tr>
+    <tr><td>Soft drop</td><td><kbd>&darr;</kbd></td><td>Drag down</td></tr>
+    <tr><td>Hard drop</td><td><kbd>SPACE</kbd></td><td>Flick down</td></tr>
+    <tr><td>Live mode</td><td><kbd>L</kbd></td><td>The LIVE button</td></tr>
+    <tr><td>Pause and controls</td><td><kbd>ESC</kbd> or <kbd>P</kbd></td><td>The II button</td></tr>
+    <tr><td>Restart</td><td><kbd>R</kbd></td><td>RESTART in the pause menu (tap twice)</td></tr>
+    <tr><td>High scores</td><td><kbd>H</kbd></td><td>LEADERBOARD in the pause menu</td></tr>
+    <tr><td>Sound on / off</td><td><kbd>M</kbd></td><td></td></tr>
+  </table>
+  <p>Clearing more rows at once scores more. Every ten lines is a new level, and each level falls faster.</p>
+
+  <h2>FAQ</h2>
+  <h3>Is it free?</h3>
+  <p>Yes. It is free to play in your browser, with no account, no ads and no download.</p>
+  <h3>Does it work on phones?</h3>
+  <p>Yes. On a phone, tablet or foldable you swipe to move, tap to rotate, flick down to drop, and tap a board in the map at the bottom to switch faces.</p>
+  <h3>Is it open source?</h3>
+  <p>Yes, under the MIT license. The source is on <a href="https://github.com/HoneySpoons/tetracube">GitHub</a>. Fork it, mod it, make a five-sided one.</p>
+  <h3>Is there a leaderboard?</h3>
+  <p>Yes, two: Focus and Live. A run that makes the top ten of its board can be saved with three initials, and <a href="/scores">tetracube.fun/scores</a> shows both boards live.</p>
+  <h3>How do I get my score on it?</h3>
+  <p>Finish a run with a score higher than tenth place on its board, then enter three initials and save. A run counts for the Live board only if Live mode was on before your first piece landed and stayed on.</p>
+
+  <h2>HOW IT WAS MADE</h2>
+  <p>Tetracube started as an idea at about 21:30 one evening in October 2026: four games on the sides of a cube that overlap at the corners. It was playable minutes later and live on tetracube.fun the same night. It is one HTML page with Three.js and synthesised sound, plus a small Cloudflare function for the high scores. The source is open under the MIT license.</p>
+
+  <a class="play px" href="/">PLAY &#9654;</a>
+</main>
+<footer class="px">
+  MORE BY HONEYSPOONS<br>
+  <a href="https://kuramoto.dev">KURAMOTO.DEV</a> &middot; <a href="https://changelog.systems">CHANGELOG</a> &middot; <a href="https://github.com/HoneySpoons">GITHUB</a> &middot; <a href="https://buymeacoffee.com/HoneySpoons">BUY ME A COFFEE &#9749;</a>
+</footer>
+<script>
+const COLORS = ['#00d8ff', '#ffd60a', '#b15cff', '#38e07b', '#ff4d6d', '#3a86ff', '#ff9f1c'];
+document.getElementById('title').innerHTML = [...'TETRACUBE'].map((c, i) => `<span style="color:${COLORS[i % 7]}">${c}</span>`).join('');
+</script>
+</body>
+</html>
