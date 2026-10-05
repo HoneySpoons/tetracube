@@ -167,6 +167,7 @@
     #msg h1 { font-size: 17px; }
     table.board td { padding: 3px 5px; }
     .boards { flex-direction: column; gap: 6px; }
+    .boards + .btns { position: sticky; bottom: 0; margin-top: 0; padding: 12px 0 2px; background: #000; }   /* HIGH SCORES on a phone: the boards scroll, BACK stays in view */
   }
   /* folds open (≈ 7.6–8", near-square) and small tablets: same layout, sized up */
   @media (pointer: coarse) and (min-width: 600px) and (max-width: 1180px) {
@@ -238,7 +239,8 @@
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 <script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
-<script data-goatcounter="https://tetracube.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<script>/* analytics: only the live site counts. A copy served from any other host (a mirror, localhost, file://) makes no request. */
+if (location.hostname === 'tetracube.fun') { const s = document.createElement('script'); s.dataset.goatcounter = 'https://tetracube.goatcounter.com/count'; s.async = true; s.src = '//gc.zgo.at/count.js'; document.head.appendChild(s); }</script>
 </head>
 <body>
 <div id="title"></div>
@@ -693,9 +695,14 @@ addEventListener('pointerup', e => {
   const dx = e.clientX - tutSwipe.x, dy = e.clientY - tutSwipe.y; tutSwipe = null;
   if (menu === 'tutorial' && Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) tutStep(dx < 0 ? 1 : -1);
 });
-// the AUDIO sliders: tap or drag anywhere on the bar (the n-th cell lights n cells; left of the bar is 0)
+// the AUDIO sliders: tap or drag anywhere on the bar (the n-th cell lights n cells; the left half of the first cell, and anything
+// left of it, is 0 — on touch the < button is hidden, so a thumb at the left end has to be able to reach 0)
 let slDrag = null;
-const slAt = (sl, x) => { const r = sl.getBoundingClientRect(); sfx.set(sl.dataset.k, Math.ceil((x - r.left) / r.width * 10)); };
+const slAt = (sl, x) => {
+  let v = 0;
+  for (const [i, c] of [...sl.children].entries()) { const r = c.getBoundingClientRect(); if (x >= r.left + (i ? 0 : r.width / 2)) v = i + 1; }
+  sfx.set(sl.dataset.k, v);
+};
 msg.addEventListener('pointerdown', e => {
   const slot = e.target instanceof Element && e.target.closest('.initials.name span');
   if (slot) { e.preventDefault(); nameAct('ncur', +slot.dataset.i); return; }   // move the cursor here; preventDefault keeps the phone keyboard open (and eats the click)
