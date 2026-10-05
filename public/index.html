@@ -190,6 +190,15 @@
   .initials { display: flex; gap: 14px; justify-content: center; margin: 14px 0 10px; }
   .initials span { font-size: 30px; width: 40px; padding-bottom: 6px; border-bottom: 4px solid #555a70; color: #fff; }
   .initials span.cur { border-bottom-color: #ffd60a; color: #ffd60a; animation: blinkTxt .5s steps(2, start) infinite; }
+  .initials.name { gap: 5px; margin: 12px 0 8px; }
+  .initials.name span { font-size: 16px; width: 22px; padding-bottom: 4px; border-bottom-width: 3px; cursor: pointer; }
+  @media (max-width: 360px) { .initials.name { gap: 3px; } .initials.name span { width: 20px; font-size: 14px; } }
+  .nkeys .btn { min-width: 36px; padding: 8px 10px 6px; }
+  #namein { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font: inherit; }
+  body:not(.touch) #namein { display: none; }
+  /* iOS: nothing to select or magnify on the game page; the name field is the one exception */
+  html, body, #msg, #hud, #title, #touchbar, button, a, .btn, canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #namein { -webkit-user-select: text; user-select: text; }
   .hint { font-size: 8px; color: var(--dim); }
   #coin { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; color: #ffd60a; text-decoration: none; font-size: 9px;
     border: 3px solid #ffd60a; padding: 6px 12px 6px 8px; background: #000; box-shadow: 4px 4px 0 #6b5400; }
@@ -437,6 +446,7 @@ function gameOver() {
   const mine = ov = {
     kind: 'over', stage: 'loading', mode: runMode(), board: null, rank: null, err: '', top: false, cube: cubes > 0,
     initials: (localStorage.getItem('tetracube.initials') || 'AAA').split(''), cursor: 0,
+    name: nameSlots(), ncur: 0,
     run: { score, lines, level: level(), mode: runMode(), durationMs: Math.round(performance.now() - runStart) },
   };
   renderOverlay();
@@ -444,9 +454,9 @@ function gameOver() {
     if (ov !== mine) return;
     mine.board = b;
     mine.top = b.length < 10 || score > b[b.length - 1].score;
-    mine.stage = mine.top || mine.cube ? 'entry' : 'board';     // one initials entry covers the board and the hall of fame
+    mine.stage = mine.top ? 'entry' : mine.cube ? 'name' : 'board';   // initials for the board, then a name for the hall of fame
     renderOverlay();
-  }).catch(() => { if (ov === mine) { mine.stage = mine.cube ? 'entry' : 'offline'; renderOverlay(); } });
+  }).catch(() => { if (ov === mine) { mine.stage = mine.cube ? 'name' : 'offline'; renderOverlay(); } });
 }
 
 // ── Input ────────────────────────────────────────────────────────────────────
@@ -455,6 +465,10 @@ addEventListener('keydown', e => {
   sfx.init();
   if (k === 'Escape') { escape(); return; }
   if (ov?.stage === 'entry') { e.preventDefault(); entryKey(e.key); return; }
+  if (ov?.stage === 'name') {
+    if (document.activeElement === namein()) { if (k === 'Enter') { e.preventDefault(); nameKey('Enter'); } return; }   // the on-screen keyboard types into the field
+    e.preventDefault(); nameKey(e.key); return;
+  }
   if (k === 'm') { banner(sfx.toggle() ? 'SOUND OFF' : 'SOUND ON', 0, 0xffffff); if (msg.classList.contains('on')) renderOverlay(); return; }
   if (k === 'h' && !over) { toggleBoards(); return; }
   if (navKey(e, k)) return;
@@ -497,6 +511,7 @@ const playable = () => !over && !paused && !ov;
 // extension's insert mode has eaten the key (see the keytrap below).
 function escape() {
   if (ov?.stage === 'entry') { entryKey('Escape'); return; }
+  if (ov?.stage === 'name') { if (document.activeElement === namein()) namein().blur(); else nameKey('Escape'); return; }
   if (ov?.kind === 'boards') { toggleBoards(); return; }
   if (over) return;
   if (menu) { closeMenu(); return; }
@@ -533,7 +548,7 @@ function activate(el) {
   if (trap) trap();
 }
 function navKey(e, k) {
-  if (!msg.classList.contains('on') || ov?.stage === 'entry') return false;
+  if (!msg.classList.contains('on') || ov?.stage === 'entry' || ov?.stage === 'name') return false;
   const items = navItems(); if (!items.length) return false;
   if (k === 'ArrowDown' || k === 's' || k === 'ArrowUp' || k === 'w') { e.preventDefault(); kbdSeen = true; moveNav(k === 'ArrowDown' || k === 's' ? 1 : -1); return true; }
   const el = items[navIdx(items)];
@@ -587,7 +602,11 @@ if (!document.body.classList.contains('touch') && !matchMedia('(pointer: coarse)
 }
 
 // ── Touch: swipe to move, tap to rotate, flick down to drop ─────────────────
-if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('touch');
+if (matchMedia('(pointer: coarse)').matches) {
+  document.body.classList.add('touch');
+  // No hardware keyboard to trap and iOS magnifies text fields: on touch the keytrap is inert and gone from layout.
+  keytrap.readOnly = true; keytrap.inputMode = 'none'; keytrap.style.display = 'none';
+}
 let tp = null;
 const STEP = () => Math.max(22, Math.min(40, innerWidth / 14));
 addEventListener('pointerdown', e => {
@@ -624,6 +643,8 @@ addEventListener('pointercancel', () => { tp = null; });
 if (matchMedia('(pointer: coarse)').matches) {
   const stop = e => e.preventDefault();
   for (const t of ['gesturestart', 'gesturechange', 'gestureend', 'dblclick']) document.addEventListener(t, stop, { passive: false });
+  // no text selection or long-press callout on the game page, except inside the name field
+  for (const t of ['selectstart', 'contextmenu']) document.addEventListener(t, e => { if (!(e.target instanceof Element && e.target.closest('#namein'))) e.preventDefault(); });
   let lastEnd = 0;                               // a second touchend inside 300 ms is a double tap: cancel its zoom,
   document.addEventListener('touchend', e => {   // except on buttons and links, which must still click
     const now = e.timeStamp;
@@ -676,6 +697,8 @@ addEventListener('pointerup', e => {
 let slDrag = null;
 const slAt = (sl, x) => { const r = sl.getBoundingClientRect(); sfx.set(sl.dataset.k, Math.ceil((x - r.left) / r.width * 10)); };
 msg.addEventListener('pointerdown', e => {
+  const slot = e.target instanceof Element && e.target.closest('.initials.name span');
+  if (slot) { e.preventDefault(); nameAct('ncur', +slot.dataset.i); return; }   // move the cursor here; preventDefault keeps the phone keyboard open (and eats the click)
   const sl = e.target instanceof Element && e.target.closest('.sl'); if (!sl) return;
   e.preventDefault(); slDrag = { k: sl.dataset.k, id: e.pointerId }; slAt(sl, e.clientX);
 });
@@ -700,9 +723,10 @@ function onAct(act, i, b) {
       const k = ALPHA.indexOf(ov.initials[i]), d = act === 'up' ? 1 : -1;
       ov.initials[i] = ALPHA[(k + d + ALPHA.length) % ALPHA.length]; sfx.rotate(); renderOverlay();
     }
-    else if (act === 'save') submit(ov);
-    else if (act === 'skip') { ov.stage = 'board'; renderOverlay(); }
+    else if (act === 'save') entryKey('Enter');
+    else if (act === 'skip') entryKey('Escape');
   }
+  else if (ov?.stage === 'name') nameAct(act, i);
 }
 
 // ── Scene ────────────────────────────────────────────────────────────────────
@@ -1276,27 +1300,67 @@ function entryKey(key) {
     const i = ALPHA.indexOf(o.initials[o.cursor]), d = ch === 'ArrowUp' ? 1 : -1;
     o.initials[o.cursor] = ALPHA[(i + d + ALPHA.length) % ALPHA.length]; sfx.rotate();
   }
-  else if (ch === 'Escape') { o.stage = 'board'; }
-  else if (ch === 'Enter') { submit(o); return; }
+  else if (ch === 'Escape') { o.stage = 'board'; }                               // skip: no score, no hall of fame
+  else if (ch === 'Enter') { if (o.cube) { o.stage = 'name'; o.ncur = 0; renderOverlay(); } else submit(o); return; }
   renderOverlay();
 }
+// The hall-of-fame name: ten slots, blank allowed, trailing blanks trimmed, at least one character. Keys as the
+// initials, plus ←/→ to move; on touch, ▲▼◂▸ work the current slot and KEYBOARD opens the phone's own.
+const NAME_KEY = 'tetracube.name', NALPHA = ALPHA + ' ';
+function nameSlots() { let s = ''; try { s = localStorage.getItem(NAME_KEY) || localStorage.getItem('tetracube.initials') || ''; } catch {} return (s || 'AAA').padEnd(10).slice(0, 10).split(''); }
+const nameOf = o => o.name.join('').replace(/\s+/g, ' ').trim();   // what the server stores: single-spaced, no ends
+const namein = () => document.getElementById('namein');
+function paintName() {                            // in place, so an open on-screen keyboard stays open
+  const o = ov; if (o?.stage !== 'name') return;
+  document.querySelectorAll('.initials.name span').forEach((el, i) => { el.textContent = o.name[i] === ' ' ? '\u00a0' : o.name[i]; el.classList.toggle('cur', i === o.ncur); });
+  const err = document.getElementById('nerr'); if (err && !o.err) err.textContent = '';
+}
+function nameKey(key) {
+  const o = ov, ch = key.length === 1 ? key.toUpperCase() : key;
+  if (NALPHA.includes(ch) && ch.length === 1) { o.name[o.ncur] = ch; o.ncur = Math.min(9, o.ncur + 1); sfx.move(); }
+  else if (ch === 'Backspace') { if (o.name[o.ncur] !== ' ') o.name[o.ncur] = ' '; else o.ncur = Math.max(0, o.ncur - 1); o.name[o.ncur] = ' '; sfx.move(); }
+  else if (ch === 'ArrowLeft') { o.ncur = Math.max(0, o.ncur - 1); sfx.move(); }
+  else if (ch === 'ArrowRight') { o.ncur = Math.min(9, o.ncur + 1); sfx.move(); }
+  else if (ch === 'ArrowUp' || ch === 'ArrowDown') { const i = NALPHA.indexOf(o.name[o.ncur]), d = ch === 'ArrowUp' ? 1 : -1; o.name[o.ncur] = NALPHA[(i + d + NALPHA.length) % NALPHA.length]; sfx.rotate(); }
+  else if (ch === 'Escape') { o.cube = false; if (o.top) submit(o); else { o.stage = 'board'; renderOverlay(); } return; }   // skip the wall; a top-10 run still saves its initials
+  else if (ch === 'Enter') { if (!nameOf(o)) { o.err = "A NAME NEEDS A LETTER"; renderOverlay(); return; } submit(o); return; }
+  else return;
+  o.err = ''; paintName();
+}
+function nameAct(act, i) {
+  const o = ov;
+  if (act === 'ncur') { o.ncur = i; paintName(); }
+  else if (act === 'nup') nameKey('ArrowUp'); else if (act === 'ndown') nameKey('ArrowDown');
+  else if (act === 'nleft') nameKey('ArrowLeft'); else if (act === 'nright') nameKey('ArrowRight');
+  else if (act === 'nkbd') { const f = namein(); if (f) { f.value = nameOf(o); f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }
+  else if (act === 'nsave') nameKey('Enter'); else if (act === 'nskip') nameKey('Escape');
+}
+// the phone's keyboard: the field's value is the name, filtered and capped, painted into the slots
+msg.addEventListener('input', e => {
+  if (e.target.id !== 'namein' || ov?.stage !== 'name') return;
+  const v = e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ').slice(0, 10);
+  if (v !== e.target.value) e.target.value = v;
+  ov.name = v.padEnd(10).split(''); ov.ncur = Math.min(9, v.length); ov.err = ''; paintName();
+});
 async function submit(o) {
   o.stage = 'sending'; o.err = ''; renderOverlay();
-  const initials = o.initials.join('');
+  const initials = o.initials.join(''), name = nameOf(o);
   // Each post settles on its own and never throws: a hall-of-fame failure (offline, 500, blocked)
   // can't take the score down with it, and the other way round.
   const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     .then(async r => ({ r, body: await r.json().catch(() => ({})) }), () => ({ r: { ok: false, status: 0 }, body: {} }));
   try {
-    const [s, c] = await Promise.all([o.top ? post(API, { initials, ...o.run }) : null, o.cube ? post(CUBE_API, { initials, ...o.run }) : null]);
+    const [s, c] = await Promise.all([o.top ? post(API, { initials, ...o.run }) : null, o.cube ? post(CUBE_API, { initials: name, ...o.run }) : null]);
     if (ov !== o) return;
-    // both endpoints share one initials filter, so they refuse the same initials together
-    if ([s, c].some(x => x && x.r.status === 400 && x.body.error === 'initials')) { o.stage = 'entry'; o.err = 'PICK OTHER INITIALS'; renderOverlay(); return; }
-    localStorage.setItem('tetracube.initials', initials);
-    if (c) { if (c.r.ok) o.place = c.body.place; else o.cubeErr = c.r.status === 429 ? 'HALL OF FAME BUSY — TRY LATER' : 'HALL OF FAME SAID NO'; }
+    // a refused name or initials goes back to its own screen; whatever the other side already saved is kept,
+    // and not posted again on the retry
+    if (c?.r.ok) { o.place = c.body.place; o.cube = false; try { localStorage.setItem(NAME_KEY, name); } catch {} }
+    if (s?.r.ok) { o.rank = s.body.rank; o.mine = { initials, score: o.run.score }; o.top = false; try { localStorage.setItem('tetracube.initials', initials); } catch {} }
+    if (s && s.r.status === 400 && s.body.error === 'initials') { o.stage = 'entry'; o.err = 'PICK OTHER INITIALS'; renderOverlay(); return; }
+    if (c && c.r.status === 400 && c.body.error === 'initials') { o.stage = 'name'; o.err = 'PICK ANOTHER NAME'; renderOverlay(); return; }
+    if (c && !c.r.ok) o.cubeErr = c.r.status === 429 ? 'HALL OF FAME BUSY — TRY LATER' : 'HALL OF FAME SAID NO';
     if (s && !s.r.ok) { o.stage = 'offline'; o.err = s.r.status === 429 ? 'TOO MANY SCORES — TRY LATER' : 'SCORE REJECTED'; renderOverlay(); return; }
-    if (s) {
-      o.rank = s.body.rank; o.mine = { initials, score: o.run.score };
+    if (s?.r.ok) {
       o.board = await fetchBoard(o.mode).catch(() => o.board);   // the score is saved; a failed refresh keeps the old board
       if (ov !== o) return;
     }
@@ -1456,6 +1520,15 @@ function drawOverlay() {
     (o.err ? `<p style="color:#ff4d6d">${o.err}</p>` : '') +
     `<div class="btns"><button class="btn go" data-act="save">SAVE</button><button class="btn" data-act="skip">SKIP</button></div>` +
     `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
+  else if (o.stage === 'name') body =
+    `<p style="margin-top:16px">${rainbow('YOU BUILT A TETRACUBE!')}</p><p style="color:var(--dim)">SIGN THE HALL OF FAME</p><p>YOUR NAME, UP TO 10</p>` +
+    `<div class="initials name">${o.name.map((ch, i) => `<span class="${i === o.ncur ? 'cur' : ''}" data-act="ncur" data-i="${i}">${ch === ' ' ? '&nbsp;' : esc(ch)}</span>`).join('')}</div>` +
+    `<div class="btns tch nkeys"><button class="btn" data-act="nup">&#9650;</button><button class="btn" data-act="ndown">&#9660;</button>` +
+    `<button class="btn" data-act="nleft">&lsaquo;</button><button class="btn" data-act="nright">&rsaquo;</button><button class="btn" data-act="nkbd">KEYBOARD</button></div>` +
+    `<input id="namein" maxlength="10" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Your name">` +
+    `<p id="nerr" style="color:#ff4d6d">${o.err || ''}</p>` +
+    `<div class="btns"><button class="btn go" data-act="nsave">SAVE</button><button class="btn" data-act="nskip">SKIP</button></div>` +
+    `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; &larr;&rarr; MOVE &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
   else if (o.stage === 'offline') body = hof + `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>` + coinHtml();
   else if (!o.board) body = hof + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>` + coinHtml();
   else body = hof + `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
@@ -1518,7 +1591,7 @@ if (['127.0.0.1', 'localhost'].includes(location.hostname))
   window.__tc = { get grid() { return grid; }, get actives() { return actives; }, get active() { return active; }, ringCol, clearRows, W, H, S, RING,
     get streak() { return [...streak]; }, get cubes() { return cubes; }, get score() { return score; }, get lines() { return lines; },
     get paused() { return paused; }, get over() { return over; }, get armed() { return armed; }, get menu() { return menu; },
-    get tutPage() { return tutPage; }, get tutFirst() { return tutFirst; }, escape,
+    get tutPage() { return tutPage; }, get tutFirst() { return tutFirst; }, escape, get ov() { return ov; },
     get audio() { return sfx.probe(); },
     get nav() { const it = navItems(); return { screen: scr(), idx: navIdx(it), items: it.map(e => e.textContent.trim().slice(0, 18)), focused: it[navIdx(it)]?.textContent.trim().slice(0, 18) ?? null, cursorOn: it.findIndex(e => e.classList.contains('focus')) }; },
     // fill the empty cells of face f's bottom n rows and clear: rows(f, 4) is a TETRA on f, rows(f, 1..3) breaks the streak

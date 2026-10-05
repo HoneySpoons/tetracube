@@ -1,11 +1,14 @@
 // GET  /api/cube → { entries: [{ initials, created_at }] }, oldest first: the order people did it in.
 // POST /api/cube { initials, score, lines, level, durationMs } → 201 { place }
+//   `initials` is the name on the wall: 1–10 of [A-Z0-9 ] (lib/api.js nameProblem). The field keeps its old name
+//   so the 3-letter rows from before migration 0002 and the client's one `initials` word stay as they were.
+// DELETE /api/cube/:id (functions/api/cube/[id].js) voids a row, behind the ADMIN_TOKEN secret.
 //
 // Four TETRAs back to back, one on each face. The run's numbers get the same checks as a score
 // (lib/api.js), plus the least a TETRACUBE can take: 16 lines, and four TETRAs plus the bonus at
 // level 1 (4 × 800 + 3200). Like the scores, it comes from the browser and can be forged; this keeps
 // out the lazy fake, not a determined one.
-import { json, goodInitials, runProblem, readJson, ipHash, RATE_WINDOW, RATE_MAX } from '../../lib/api.js';
+import { json, cleanName, nameProblem, runProblem, readJson, ipHash, RATE_WINDOW, RATE_MAX } from '../../lib/api.js';
 
 const MIN_LINES = 16, MIN_SCORE = 4 * 800 + 3200;
 
@@ -23,9 +26,9 @@ export async function onRequestHead(ctx) {
 export async function onRequestPost({ request, env }) {
   const [b, err] = await readJson(request);
   if (err) return err;
-  const initials = String(b?.initials ?? '').toUpperCase();
+  const initials = cleanName(b?.initials ?? b?.name ?? '');
   const { score, lines, level, durationMs } = b ?? {};
-  if (!goodInitials(initials)) return json({ error: 'initials' }, 400);
+  if (nameProblem(initials)) return json({ error: 'initials' }, 400);
   const problem = runProblem({ score, lines, level, durationMs });
   if (problem) return json({ error: problem }, 400);
   if (lines < MIN_LINES || score < MIN_SCORE) return json({ error: 'implausible' }, 400);

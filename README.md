@@ -42,11 +42,13 @@ In **focus** mode only the face you're on falls. In **live** mode all four fall,
 Each file in `migrations/` runs once against production, before the deploy that needs it:
 
     npx wrangler d1 execute tetracube --remote --file=migrations/0001-cube-hof.sql
+    npx wrangler d1 execute tetracube --remote --file=migrations/0002-cube-hof-name10.sql
 
 `schema.sql` holds every table, for a fresh database (`npm run db:local`).
 
 `IP_SALT` is a Pages secret (`wrangler pages secret put IP_SALT --project-name tetracube`).
 The API stores a salted hash of the client address for rate limiting, never the address.
+`ADMIN_TOKEN` is the second secret; it gates `DELETE /api/cube/:id` (below). Locally both live in `.dev.vars`.
 
 ## Moderation
 
@@ -55,6 +57,15 @@ A three-letter filter can't catch everything. To remove a score from the live bo
     npx wrangler d1 execute tetracube --remote --command "DELETE FROM scores WHERE initials='XXX'"
 
 To see what's there first: `--command "SELECT id, initials, score, mode, created_at FROM scores ORDER BY id DESC LIMIT 20"`.
+
+The TETRACUBE hall of fame takes a name of up to 10 characters, so its filter is longer (`lib/api.js`), and a row
+can be voided two ways:
+
+    npx wrangler d1 execute tetracube --remote --command "SELECT id, initials, created_at FROM cube_hof ORDER BY id"
+    npx wrangler d1 execute tetracube --remote --command "DELETE FROM cube_hof WHERE id=7"
+    curl -X DELETE https://tetracube.fun/api/cube/7 -H "Authorization: Bearer $ADMIN_TOKEN"
+
+The ids keep their order, so voiding #7 leaves everyone else's place as it was.
 
 ## License
 

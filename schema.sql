@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS scores_rate  ON scores (ip_hash, created_at);
 
 CREATE TABLE IF NOT EXISTS cube_hof (
   id          INTEGER PRIMARY KEY,                 -- order of achievement: being first is the prize
-  initials    TEXT    NOT NULL CHECK (length(initials) = 3),
+  initials    TEXT    NOT NULL CHECK (length(initials) BETWEEN 1 AND 10),   -- the name on the wall (migration 0002)
   score       INTEGER NOT NULL CHECK (score > 0),
   lines       INTEGER NOT NULL CHECK (lines >= 16),
   duration_ms INTEGER NOT NULL,
