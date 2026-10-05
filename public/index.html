@@ -197,6 +197,25 @@
   #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
   #about { display: block; width: max-content; margin: 14px auto 0; color: var(--dim); font-size: 8px; text-decoration: none; }
   #about:hover { color: #fff; }
+  /* keyboard menus: a > cursor and an inverted row mark the focused item (hover looks the same) */
+  #msg .menu .btn { display: block; width: 240px; margin: 8px auto 0; box-sizing: border-box; }
+  #msg [data-nav] { position: relative; }
+  #msg .btn.focus { background: #fff; color: #000; }
+  #msg .btn.go.focus { background: #38e07b; color: #000; }
+  #msg .btn.warn.focus { background: #ff4d6d; color: #000; }
+  #coin.focus { background: #ffd60a; color: #000; }
+  #about.focus { color: #fff; }
+  #msg .focus::before { content: ">"; position: absolute; left: -20px; top: 50%; transform: translateY(-50%); color: #ffd60a; font-size: 10px; }
+  .arow { display: flex; align-items: center; justify-content: center; gap: 12px; width: max-content; margin: 14px auto; }
+  .arow .al { width: 52px; text-align: left; }
+  .arow .an { width: 22px; text-align: right; color: var(--dim); }
+  .arow .btn { margin: 0; padding: 7px 8px 5px; box-shadow: none; }
+  .arow.focus .al { color: #ffd60a; }
+  .sl { display: inline-flex; gap: 2px; padding: 8px 4px; touch-action: none; cursor: pointer; }   /* padding + gap keep a thumb off the < > buttons */
+  .sl i { display: block; width: 10px; height: 14px; background: #2a3342; }
+  .sl i.on { background: #ffd60a; }
+  body.touch .sl i { width: 12px; height: 18px; }
+  body.touch .arow .btn { display: none; }        /* on touch the bar itself is the control; the row then fits a 344 fold */
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 <script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
@@ -260,6 +279,9 @@ let grid, actives, bags, lastDrop, active, score, lines, live, paused, over, fla
 // A run is ranked LIVE only if live mode was on before the first lock and never turned off.
 let locks = 0, rankedLive = false, runStart = 0;
 let armed = false;          // the pause menu's RESTART takes two taps; this is the first
+let menu = null;            // an open pause sub-menu: null | 'audio'
+const navPos = { pause: 0, audio: 0, over: 0, boards: 0 };   // the menu cursor per screen; the pause one survives a reopen
+let overAt = 0;             // when the game-over screen opened: a Space held through the last drop can't start a new game
 let streak = [], cubes = 0; // faces in the current TETRA streak, in order; TETRACUBEs this run
 const runMode = () => rankedLive ? 'live' : 'focus';
 
@@ -270,9 +292,10 @@ function reset() {
   bags = [[], [], [], []];
   lastDrop = [0, 0, 0, 0];
   active = 0; score = 0; lines = 0; live = false; paused = false; over = false; flash = ''; newHi = false;
-  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; streak = []; cubes = 0; renderOverlay();
+  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; menu = null; streak = []; cubes = 0; renderOverlay();
   for (let f = 0; f < 4; f++) spawn(f);
   setActive(0, true);
+  sfx.sync();
 }
 
 function peekType(f) { refill(f); return bags[f][bags[f].length - 1]; }
@@ -397,7 +420,8 @@ function gameOver() {
   if (over) return; over = true;
   newHi = score > hi;
   if (newHi) { hi = score; localStorage.setItem('tetracube.hi', hi); }
-  fx.over();
+  fx.over(); sfx.sync();
+  overAt = performance.now(); navPos.over = 0;
   if (score <= 0) { ov = { kind: 'over', stage: 'board', mode: runMode(), board: null }; renderOverlay(); return; }
   const mine = ov = {
     kind: 'over', stage: 'loading', mode: runMode(), board: null, rank: null, err: '', top: false, cube: cubes > 0,
@@ -419,8 +443,9 @@ addEventListener('keydown', e => {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   sfx.init();
   if (ov?.stage === 'entry') { e.preventDefault(); entryKey(e.key); return; }
-  if (k === 'm') { banner(sfx.toggle() ? 'SOUND OFF' : 'SOUND ON', 0, 0xffffff); if (paused) renderOverlay(); return; }
+  if (k === 'm') { banner(sfx.toggle() ? 'SOUND OFF' : 'SOUND ON', 0, 0xffffff); if (msg.classList.contains('on')) renderOverlay(); return; }
   if (k === 'h' && !over) { toggleBoards(); return; }
+  if (navKey(e, k)) return;
   if (ov?.kind === 'boards') { if (k === 'Escape' || k === 'p' || k === 'h') toggleBoards(); return; }
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(k)) e.preventDefault();
   if (k === 'r') { reset(); return; }
@@ -451,15 +476,60 @@ function toggleLive() {
 }
 function togglePause() {
   if (over || ov) return;
-  paused = !paused; armed = false;
+  paused = !paused; armed = false; menu = null;
   if (!paused) lastDrop = lastDrop.map(() => performance.now());
-  renderOverlay();
+  renderOverlay(); sfx.sync();
 }
 const playable = () => !over && !paused && !ov;
+// a background tab pauses: a game that keeps falling where nobody can see it is a bug players report
+document.addEventListener('visibilitychange', () => { if (document.hidden && playable()) togglePause(); });
+
+// ── Keyboard menus ───────────────────────────────────────────────────────────
+// Every overlay is a list of [data-nav] items. ↑/↓ (W/S) move a cursor, Enter/Space press the item, Esc goes
+// back a level (AUDIO → PAUSE → the game), ←/→ work a slider row. The cursor is virtual: DOM focus stays on
+// #keytrap, so Vimium stays out and the mouse and touch paths are untouched. Tab still reaches the real buttons
+// and the cursor follows it. The initials screen keeps its own keys (type, arrows, Enter, Esc).
+const scr = () => ov?.kind === 'boards' ? 'boards' : over ? 'over' : menu === 'audio' ? 'audio' : 'pause';
+const navItems = () => [...msg.querySelectorAll('[data-nav]')];
+const navIdx = (items = navItems()) => Math.max(0, Math.min(items.length - 1, navPos[scr()] | 0));
+let kbdSeen = false;                           // a touch device shows the cursor once a key has moved it
+function applyNav() {
+  const items = navItems();
+  if (!items.length || (document.body.classList.contains('touch') && !kbdSeen)) return;
+  const i = navIdx(items);
+  navPos[scr()] = i;
+  items.forEach((el, k) => el.classList.toggle('focus', k === i));
+}
+function moveNav(d) {
+  const items = navItems(); if (!items.length) return;
+  navPos[scr()] = (navIdx(items) + d + items.length) % items.length;
+  applyNav(); sfx.move();
+  if (trap) trap();
+}
+function activate(el) {
+  if (!el || el.dataset.k) return;             // a slider row changes with ←/→, not Enter
+  el.click();                                  // the same path as a tap: the click listener → onAct, or the link opens
+  if (trap) trap();
+}
+function navKey(e, k) {
+  if (!msg.classList.contains('on') || ov?.stage === 'entry') return false;
+  const items = navItems(); if (!items.length) return false;
+  if (k === 'ArrowDown' || k === 's' || k === 'ArrowUp' || k === 'w') { e.preventDefault(); kbdSeen = true; moveNav(k === 'ArrowDown' || k === 's' ? 1 : -1); return true; }
+  const el = items[navIdx(items)];
+  if ((k === 'ArrowLeft' || k === 'ArrowRight') && el.dataset.k) { e.preventDefault(); kbdSeen = true; sfx.set(el.dataset.k, audio[el.dataset.k] + (k === 'ArrowRight' ? 1 : -1)); return true; }
+  if (k === 'Enter' || k === ' ') {
+    e.preventDefault();
+    if (over && performance.now() - overAt < 700) return true;
+    activate(el); return true;
+  }
+  if (k === 'Escape' && menu === 'audio') { closeAudio(); return true; }
+  return false;
+}
+function closeAudio() { menu = null; renderOverlay(); }
 
 // Keyboard extensions (Vimium: F = link hints, D = scroll) leave the page alone
 // while a text field has focus, so on desktop a hidden one keeps it.
-const keytrap = document.getElementById('keytrap');
+const keytrap = document.getElementById('keytrap'), msg = document.getElementById('msg');
 let trap = null;                               // desktop only; touch has no trap (no on-screen keyboard)
 if (!document.body.classList.contains('touch') && !matchMedia('(pointer: coarse)').matches) {
   trap = () => { if (document.activeElement !== keytrap) keytrap.focus({ preventScroll: true }); };
@@ -534,18 +604,39 @@ addEventListener('click', e => {
   const act = b.dataset.act, i = +b.dataset.i;
   onAct(act, i, b);
   // Hand focus back to the trap: the pressed button is usually gone (re-rendered), and a button
-  // that survives (ESC MENU) would leave Vimium the keys. A keyboard press on RESTART instead
-  // lands on the new SURE? button, so a second Enter confirms.
+  // that survives (ESC MENU) would leave Vimium the keys. A keyboard press lands on the menu
+  // cursor, which stays on RESTART through CONFIRM?, so a second Enter confirms.
   if (!trap) return;
-  if (e.detail === 0 && act === 'restart' && armed) msg.querySelector('[data-act=restart]')?.focus();
-  else if (e.detail > 0 || document.activeElement === document.body) trap();
+  const a = document.activeElement;
+  if (e.detail > 0 || !a || a === document.body || !a.isConnected) trap();
 });
+// the cursor follows Tab (real focus) and the mouse, so a click and an Enter always agree
+msg.addEventListener('focusin', e => { const i = navItems().indexOf(e.target); if (i >= 0) { navPos[scr()] = i; applyNav(); } });
+msg.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse') return;
+  const el = e.target instanceof Element && e.target.closest('[data-nav]'), i = el ? navItems().indexOf(el) : -1;
+  if (i >= 0 && i !== navIdx()) { navPos[scr()] = i; applyNav(); }
+});
+// the AUDIO sliders: tap or drag anywhere on the bar (the n-th cell lights n cells; left of the bar is 0)
+let slDrag = null;
+const slAt = (sl, x) => { const r = sl.getBoundingClientRect(); sfx.set(sl.dataset.k, Math.ceil((x - r.left) / r.width * 10)); };
+msg.addEventListener('pointerdown', e => {
+  const sl = e.target instanceof Element && e.target.closest('.sl'); if (!sl) return;
+  e.preventDefault(); slDrag = { k: sl.dataset.k, id: e.pointerId }; slAt(sl, e.clientX);
+});
+addEventListener('pointermove', e => { if (slDrag && e.pointerId === slDrag.id) { const sl = msg.querySelector(`.sl[data-k="${slDrag.k}"]`); if (sl) slAt(sl, e.clientX); } });
+addEventListener('pointerup', e => { if (slDrag?.id === e.pointerId) slDrag = null; });
+addEventListener('pointercancel', () => { slDrag = null; });
 function onAct(act, i, b) {
   if (act === 'face' && playable()) setActive(+b.dataset.f);
   else if (act === 'live' && playable()) toggleLive();
   else if (act === 'pause' || act === 'resume') togglePause();
   else if (act === 'again') reset();
   else if (act === 'restart' && paused && !ov) { if (armed) reset(); else { armed = true; sfx.rotate(); renderOverlay(); } }
+  else if (act === 'audio' && paused && !ov) { armed = false; menu = 'audio'; navPos.audio = 0; renderOverlay(); }
+  else if (act === 'back') closeAudio();
+  else if (act === 'vol') sfx.set(b.dataset.k, audio[b.dataset.k] + +b.dataset.d);
+  else if (act === 'mute') { sfx.toggle(); renderOverlay(); }
   else if (act === 'boards') toggleBoards();
   else if (ov?.stage === 'entry') {
     if (act === 'up' || act === 'down') {
@@ -696,49 +787,152 @@ screen.orientation?.addEventListener?.('change', () => setTimeout(resize, 50)); 
 document.fonts?.ready.then(resize);                                               // the HUD's height depends on the font
 
 // ── Sound: everything synthesised, nothing to load ──────────────────────────
+// Three settings, kept in localStorage: SFX 0–10, MUSIC 0–10 and MUTE ALL (the M key). The graph is
+// voices → sfx bus | music bus (behind a duck) → master → out; mute is master at 0, so the voices never
+// have to know. The context is made on the first key, tap or click (the autoplay rule), and a refusal
+// (no device, headless) means silence, never an error.
+const AUDIO_KEY = 'tetracube.audio';
+const audio = { sfx: 10, music: 6, mute: false };
+try {
+  const saved = JSON.parse(localStorage.getItem(AUDIO_KEY) || '{}');
+  for (const k of ['sfx', 'music']) if (Number.isFinite(+saved[k])) audio[k] = Math.max(0, Math.min(10, Math.round(+saved[k])));
+  if (typeof saved.mute === 'boolean') audio.mute = saved.mute;
+} catch {}
 const sfx = (() => {
-  let ctx, master, noiseBuf, muted = false;
+  let ctx, master, bus, musicBus, duckG, noiseBuf;
   const st = (base, n) => base * Math.pow(2, n / 12);
   const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31];
+  const quiet = () => !ctx || audio.mute || !audio.sfx;
+  const ramp = (g, v, dur = 0.02) => { const t = ctx.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v, t + dur); };
+  function apply() { if (!ctx) return; ramp(master.gain, audio.mute ? 0 : 1); ramp(bus.gain, 0.5 * audio.sfx / 10); ramp(musicBus.gain, 0.5 * audio.music / 10); }
+  function save() { try { localStorage.setItem(AUDIO_KEY, JSON.stringify(audio)); } catch {} }
+  function noiseBuffer() {
+    if (!noiseBuf) {
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuf;
+  }
   function tone(f, dur, type = 'sine', vol = 0.1, f2 = null, when = 0) {
-    if (!ctx || muted) return;
+    if (quiet()) return;
     const t = ctx.currentTime + when, o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t);
     if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.03);
+    o.connect(g).connect(bus); o.start(t); o.stop(t + dur + 0.03);
   }
   function noise(dur, vol, f, f2, when = 0, q = 1) {
-    if (!ctx || muted) return;
-    if (!noiseBuf) {
-      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
+    if (quiet()) return;
     const t = ctx.currentTime + when, s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
-    s.buffer = noiseBuf; fl.type = 'bandpass'; fl.Q.value = q;
+    s.buffer = noiseBuffer(); fl.type = 'bandpass'; fl.Q.value = q;
     fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(fl).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.03);
+    s.connect(fl).connect(g).connect(bus); s.start(t); s.stop(t + dur + 0.03);
   }
-  return {
+  // the music drops to a fifth under a stinger and comes back over 0.7 s after it
+  function duck(sec) {
+    if (!ctx) return;
+    const g = duckG.gain, t = ctx.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0.2, t + 0.06);
+    g.setValueAtTime(0.2, t + sec); g.linearRampToValueAtTime(1, t + sec + 0.7);
+  }
+
+  // The backing track: a 16-bar chiptune loop in A minor, scheduled 200 ms ahead on this same context.
+  // A square lead (eighth notes; ~ holds, - rests), a triangle bass in octaves, a noise hat on every
+  // eighth, a sine kick on 1 and 3 and a noise snare on 2 and 4. The tempo follows the level. It plays
+  // only while there is a game to play to, keeps its place through a pause, and ducks under the stingers.
+  const LEAD = (
+    'a4 ~  e5 ~  d5 c5 b4 c5 | a4 ~  ~  ~  -  e4 g4 a4 |' +   // Am
+    'c5 ~  f5 ~  e5 d5 c5 d5 | c5 ~  ~  ~  -  a4 c5 d5 |' +   // F
+    'e5 ~  g5 ~  e5 d5 c5 d5 | e5 ~  ~  ~  -  g4 c5 e5 |' +   // C
+    'd5 ~  b4 ~  g4 ~  b4 d5 | g5 ~  f5 ~  e5 ~  d5 ~  |' +   // G
+    'a5 ~  ~  g5 e5 ~  ~  d5 | c5 ~  e5 ~  a5 ~  ~  ~  |' +   // Am
+    'f5 ~  ~  e5 d5 ~  ~  c5 | a4 ~  c5 ~  f5 ~  ~  ~  |' +   // F
+    'e5 ~  ~  d5 c5 ~  ~  b4 | g4 ~  c5 ~  e5 ~  ~  ~  |' +   // C
+    'd5 ~  ~  c5 b4 ~  ~  a4 | g#4 ~ b4 ~  e5 ~  ~  ~  |'     // G, then E to turn around
+  ).split(/[\s|]+/).filter(Boolean);
+  const ROOTS = 'a2 a2 f2 f2 c3 c3 g2 g2 a2 a2 f2 f2 c3 c3 g2 e2'.split(' ');
+  const BASSP = [0, 12, 0, 12, 0, 12, 7, 12];
+  const SEMI = { c: -9, d: -7, e: -5, f: -4, g: -2, a: 0, b: 2 };
+  const hz = tok => { const m = /^([a-g])(#?)(\d)$/.exec(tok); return 440 * Math.pow(2, (SEMI[m[1]] + (m[2] ? 1 : 0) + 12 * (m[3] - 4)) / 12); };
+  const bpm = () => Math.min(170, 116 + 5 * (level() - 1));
+  const playing = new Set();                   // scheduled sources, so a stop can silence what is already queued
+  let timer = null, step = 0, nextT = 0;
+  function voice(f, t, dur, type, vol, f2) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.005);
+    g.gain.setValueAtTime(vol, t + dur * 0.55); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(duckG); o.start(t); o.stop(t + dur + 0.02); playing.add(o); o.onended = () => playing.delete(o);
+  }
+  function hiss(t, dur, vol, f, q) {
+    const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noiseBuffer(); fl.type = 'bandpass'; fl.frequency.value = f; fl.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(fl).connect(g).connect(duckG); s.start(t); s.stop(t + dur + 0.02); playing.add(s); s.onended = () => playing.delete(s);
+  }
+  function stepAt(i, t, len) {
+    const bar = Math.floor(i / 8), s = i % 8, tok = LEAD[i];
+    if (/^[a-g]/.test(tok)) { let n = 1; while (n < 8 && LEAD[(i + n) % LEAD.length] === '~') n++; voice(hz(tok), t, len * n * 0.9, 'square', 0.07); }
+    voice(st(hz(ROOTS[bar]), BASSP[s]), t, len * 0.8, 'triangle', 0.12);
+    hiss(t, 0.03, 0.02, 9000, 0.7);
+    if (s % 4 === 0) voice(150, t, 0.1, 'sine', 0.16, 45);
+    if (s % 4 === 2) hiss(t, 0.09, 0.06, 1800, 0.6);
+  }
+  function tick() {
+    const ahead = ctx.currentTime + 0.2;
+    while (nextT < ahead) { const len = 30 / bpm(); stepAt(step % LEAD.length, nextT, len); step++; nextT += len; }
+  }
+  function startMusic() { if (timer) return; nextT = ctx.currentTime + 0.05; timer = setInterval(tick, 60); tick(); }
+  function stopMusic() {
+    if (!timer) return;
+    clearInterval(timer); timer = null;
+    for (const n of playing) { try { n.stop(); } catch {} }
+    playing.clear();
+  }
+  const api = {
     init() {
       try {                                      // no audio device (or a refusal) means silence, never an error
-        if (!ctx) { ctx = new AudioContext(); master = ctx.createGain(); master.gain.value = 0.5; master.connect(ctx.destination); }
+        if (!ctx) {
+          ctx = new AudioContext();
+          master = ctx.createGain(); bus = ctx.createGain(); musicBus = ctx.createGain(); duckG = ctx.createGain();
+          master.connect(ctx.destination); bus.connect(master); musicBus.connect(master); duckG.connect(musicBus);
+          apply();
+          ctx.onstatechange = () => api.sync();
+        }
         if (ctx.state === 'suspended') ctx.resume().catch(() => {});
       } catch { ctx = null; }
+      api.sync();
     },
-    toggle() { muted = !muted; return muted; },
-    get muted() { return muted; },
+    // the music plays exactly when there is a game to play to: running context, not paused, not over, no overlay, audible
+    sync() {
+      if (!ctx) return;
+      if (ctx.state === 'running' && !paused && !over && !ov && !audio.mute && audio.music > 0) startMusic(); else stopMusic();
+    },
+    set(k, v) {
+      audio[k] = Math.max(0, Math.min(10, Math.round(v)));
+      save(); apply(); api.sync();
+      if (msg.classList.contains('on')) renderOverlay();
+      if (k === 'sfx') api.rotate();             // hear the new level
+    },
+    toggle() { audio.mute = !audio.mute; save(); apply(); api.sync(); return audio.mute; },
+    get muted() { return audio.mute; },
+    get settings() { return { ...audio }; },
+    probe() {                                    // test hook: the live gain values and the scheduler's state
+      return { state: ctx?.state ?? 'none', time: ctx?.currentTime ?? 0, master: master?.gain.value, sfx: bus?.gain.value, music: musicBus?.gain.value,
+        duck: duckG?.gain.value, playing: !!timer, step, bpm: bpm(), queued: playing.size, bars: LEAD.length / 8, settings: { ...audio } };
+    },
     move() { tone(330, 0.035, 'square', 0.025); },
     soft() { tone(190, 0.025, 'square', 0.015); },
     rotate() { tone(520, 0.07, 'triangle', 0.06, 780); },
     lock() { noise(0.09, 0.25, 500, 200, 0, 0.8); tone(110, 0.12, 'sine', 0.2, 70); },
     hard() { noise(0.18, 0.35, 2400, 200, 0, 0.7); tone(95, 0.28, 'sine', 0.35, 42); },
     swoosh(dir) { noise(0.24, 0.2, dir > 0 ? 450 : 1700, dir > 0 ? 1700 : 450, 0, 1.4); },
-    clear(n, wave) {
+    clear(n, wave, tetra) {
+      if (tetra) duck(1);
       const base = st(523.25, wave * 3), k = Math.min(n, 4) + 2;
       for (let i = 0; i < k; i++) tone(st(base, PENTA[i + wave] ?? 24), 0.2, 'triangle', 0.09, null, i * 0.055);
       noise(0.35, 0.12, 6000, 2000, 0, 0.5);
@@ -748,12 +942,14 @@ const sfx = (() => {
     // TETRACUBE!: four rising square arpeggios, one per face a fourth apart, then a detuned sawtooth
     // chord that swells and climbs over a noise riser. Nothing else in the game uses saw chords or a riser.
     cube() {
+      duck(2.6);
       for (let f = 0; f < 4; f++) [0, 4, 7, 12].forEach((n, i) => tone(st(261.63, 5 * f + n), 0.12, 'square', 0.05, null, f * 0.16 + i * 0.035));
       noise(0.7, 0.18, 300, 9000, 0, 0.9);
       [0, 4, 7, 12, 16, 19].forEach(n => { tone(st(523.25, n), 1.3, 'sawtooth', 0.035, st(523.25, n + 12), 0.68); tone(st(523.25, n) * 1.006, 1.3, 'sawtooth', 0.03, null, 0.68); });
     },
     over() { tone(440, 1.5, 'sawtooth', 0.12, 38); noise(1.3, 0.3, 900, 60, 0.1, 0.6); },
   };
+  return api;
 })();
 
 // ── Juice: debris, glow, shake, a pop banner ─────────────────────────────────
@@ -824,7 +1020,7 @@ const fx = {
     }
     kick(0.25 + 0.15 * n + 0.4 * wave);
     if (wave && !calm()) edgeGlow = 1;
-    sfx.clear(n, wave);
+    sfx.clear(n, wave, tetra);
     banner(wave ? `CASCADE ×${wave + 1}` : tetra ? 'TETRA!' : n >= 2 ? `${n} ROWS` : '', wave);
   },
   lock(f, p) {
@@ -973,7 +1169,7 @@ function drawNet() {
 }
 
 // ── HUD ──────────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id), msg = $('msg');
+const $ = id => document.getElementById(id);
 const pad = (n, w) => String(n).padStart(w, '0');
 $('title').innerHTML = [...'TETRACUBE'].map((ch, i) =>
   `<span style="color:${hex(Object.values(PIECE_COLORS)[i % 7])}">${ch}</span>`).join('');
@@ -1055,10 +1251,10 @@ function toggleBoards() {
   if (ov?.kind === 'boards') {
     paused = ov.wasPaused; ov = null;
     if (!paused) lastDrop = lastDrop.map(() => performance.now());
-    renderOverlay(); return;
+    renderOverlay(); sfx.sync(); return;
   }
   const mine = ov = { kind: 'boards', focus: null, live: null, err: false, wasPaused: paused };
-  paused = true; renderOverlay();
+  paused = true; navPos.boards = 0; renderOverlay(); sfx.sync();
   Promise.all([fetchBoard('focus'), fetchBoard('live')])
     .then(([f, l]) => { if (ov === mine) { mine.focus = f; mine.live = l; renderOverlay(); } })
     .catch(() => { if (ov === mine) { mine.err = true; renderOverlay(); } });
@@ -1087,33 +1283,46 @@ function controlsHtml() {
     row('FACE', k('A') + k('S') + k('D') + k('F')) + row('MOVE', k('&larr;') + k('&rarr;')) + row('SOFT DROP', k('&darr;')) +
     row('ROTATE', k('&uarr;') + k('X')) + row('ROTATE BACK', k('Z')) + row('HARD DROP', k('SPACE')) +
     row('LIVE MODE', k('L')) + row('HIGH SCORES', k('H')) + row('RESTART', k('R')) +
-    row(`SOUND ${sfx.muted ? 'OFF' : 'ON'}`, k('M')) + row('RESUME', k('ESC')) + `</div>`;
+    row(soundState(), k('M')) + row('RESUME', k('ESC')) + `</div>`;
+}
+const soundState = () => 'SOUND ' + (audio.mute || (!audio.sfx && !audio.music) ? 'OFF' : audio.sfx && audio.music ? 'ON' : audio.sfx ? 'SFX ONLY' : 'MUSIC ONLY');
+function audioHtml() {
+  const slider = (k, label) => `<div class="arow" data-nav data-k="${k}"><span class="al">${label}</span>` +
+    `<button class="btn" data-act="vol" data-k="${k}" data-d="-1">&lt;</button>` +
+    `<span class="sl" data-k="${k}">${Array.from({ length: 10 }, (_, i) => `<i class="${i < audio[k] ? 'on' : ''}"></i>`).join('')}</span>` +
+    `<button class="btn" data-act="vol" data-k="${k}" data-d="1">&gt;</button><span class="an">${pad(audio[k], 2)}</span></div>`;
+  return `<div class="panel"><h1 style="color:#fff">AUDIO</h1>` + slider('sfx', 'SFX') + slider('music', 'MUSIC') +
+    `<div class="btns menu"><button class="btn${audio.mute ? ' warn' : ''}" data-nav data-act="mute">MUTE ALL: ${audio.mute ? 'ON' : 'OFF'}</button>` +
+    `<button class="btn go" data-nav data-act="back">BACK</button></div>` +
+    `<p class="hint kbd">&uarr;&darr; PICK &nbsp; &larr;&rarr; ADJUST &nbsp; ESC BACK</p></div>`;
 }
 function renderOverlay() {
   drawOverlay();
+  applyNav();
   if (trap && document.activeElement === document.body) trap();   // the focused button may have been replaced
 }
 function drawOverlay() {
   const on = !!ov || paused || over;
   msg.classList.toggle('on', on);
   if (!on) { msg.innerHTML = ''; return; }
-  const LB = `<a class="btn" href="/scores" target="_blank" rel="noopener">LEADERBOARD &#8599;</a>`;
-  const AGAIN = `<button class="btn go" data-act="again">PLAY AGAIN</button>`;
+  const LB = `<a class="btn" data-nav href="/scores" target="_blank" rel="noopener">LEADERBOARD &#8599;</a>`;
+  const AGAIN = `<button class="btn go" data-nav data-act="again">PLAY AGAIN</button>`;
   if (ov?.kind === 'boards') {
     msg.innerHTML = `<div class="panel"><h1 style="color:#fff">HIGH SCORES</h1>` + (ov.err ? '<p>SCOREBOARD OFFLINE</p>' :
       `<div class="boards"><div><p class="bt" style="color:#38e07b">FOCUS</p>${boardHtml(ov.focus)}</div>` +
       `<div><p class="bt" style="color:#ff4d6d">LIVE</p>${boardHtml(ov.live)}</div></div>`) +
-      `<div class="btns"><button class="btn go" data-act="boards">BACK TO GAME</button>${LB}</div></div>`;
+      `<div class="btns"><button class="btn go" data-nav data-act="boards">BACK TO GAME</button>${LB}</div></div>`;
     return;
   }
   if (!over) {
+    if (menu === 'audio') { msg.innerHTML = audioHtml(); return; }
     msg.innerHTML = `<div class="panel"><h1 style="color:#fff">PAUSE</h1>` +
-      `<div class="btns"><button class="btn go" data-act="resume">RESUME</button>${LB}` +
-      (armed ? `<button class="btn warn" data-act="restart">SURE? ${document.body.classList.contains('touch') ? 'TAP' : 'CLICK'} AGAIN</button>`
-             : `<button class="btn" data-act="restart">RESTART</button>`) + `</div>` +
+      `<div class="btns menu"><button class="btn go" data-nav data-act="resume">RESUME</button>${LB}` +
+      (armed ? `<button class="btn warn" data-nav data-act="restart">CONFIRM?</button>` : `<button class="btn" data-nav data-act="restart">RESTART</button>`) +
+      `<button class="btn" data-nav data-act="audio">AUDIO</button></div>` +
       controlsHtml() +
-      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) +
-      `<a id="about" href="/about" target="_blank" rel="noopener">ABOUT TETRACUBE &#8599;</a></div>`;
+      (COFFEE_URL.startsWith('#') ? '' : `<a id="coin" data-nav href="${COFFEE_URL}" target="_blank" rel="noopener"><span class="c">INSERT COIN</span> &#9749;</a>`) +
+      `<a id="about" data-nav href="/about" target="_blank" rel="noopener">ABOUT TETRACUBE &#8599;</a></div>`;
     return;
   }
   const o = ov ?? { stage: 'board', mode: runMode() };
@@ -1191,6 +1400,9 @@ document.getElementById('bootfail')?.remove();   // a slow load can finish after
 if (['127.0.0.1', 'localhost'].includes(location.hostname))
   window.__tc = { get grid() { return grid; }, get actives() { return actives; }, get active() { return active; }, ringCol, clearRows, W, H, S, RING,
     get streak() { return [...streak]; }, get cubes() { return cubes; }, get score() { return score; }, get lines() { return lines; },
+    get paused() { return paused; }, get over() { return over; }, get armed() { return armed; }, get menu() { return menu; },
+    get audio() { return sfx.probe(); },
+    get nav() { const it = navItems(); return { screen: scr(), idx: navIdx(it), items: it.map(e => e.textContent.trim().slice(0, 18)), focused: it[navIdx(it)]?.textContent.trim().slice(0, 18) ?? null, cursorOn: it.findIndex(e => e.classList.contains('focus')) }; },
     // fill the empty cells of face f's bottom n rows and clear: rows(f, 4) is a TETRA on f, rows(f, 1..3) breaks the streak
     rows(f, n) { for (let r = 0; r < n; r++) for (let j = 0; j < W; j++) grid[ringCol(f, j)][r] ??= 'I'; clearRows(); return [...streak]; },
     tetra(f) { return this.rows(f, 4); } };

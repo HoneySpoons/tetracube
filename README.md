@@ -16,12 +16,14 @@ rows on the faces beside it: cascades.
 | soft / hard drop | ↓ / space | drag down / flick down |
 | live mode | L, before your first piece lands | LIVE button |
 | pause, controls | Esc | II |
+| menus | ↑ ↓ pick, Enter presses, Esc goes back | tap |
+| sound | M mutes everything; AUDIO in the pause menu sets SFX and music | AUDIO in the pause menu |
 
 In **focus** mode only the face you're on falls. In **live** mode all four fall, the ones you aren't watching at half speed, and your score goes on the separate Live board.
 
 ## What's in here
 
-- `public/index.html`: the game (Three.js, synthesized sound, keyboard + touch)
+- `public/index.html`: the game (Three.js, synthesised sound and music, keyboard + touch)
 - `public/scores.html`: the live leaderboard (`/scores`)
 - `functions/api/scores.js`: `GET`/`POST /api/scores` (Cloudflare Pages Function)
 - `lib/api.js`: the request guards the API functions share (JSON only, same-site, size cap, initials filter, plausibility, rate-limit hash)
