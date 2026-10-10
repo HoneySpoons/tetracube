@@ -201,14 +201,15 @@
   html, body, #msg, #hud, #title, #touchbar, button, a, .btn, canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   #namein { -webkit-user-select: text; user-select: text; }
   .hint { font-size: 8px; color: var(--dim); }
-  #coin { display: inline-flex; align-items: center; gap: 10px; margin-top: 18px; color: #ffd60a; text-decoration: none; font-size: 9px;
-    border: 3px solid #ffd60a; padding: 6px 12px 6px 8px; background: #000; box-shadow: 4px 4px 0 #6b5400; }
-  /* a pixel coin, drawn in code (coinSprite below): six frames of spin on a 32 px cell; it stands still under reduced motion */
-  .coin { display: inline-block; width: 32px; height: 32px; background: var(--coin) 0 0 / 192px 32px no-repeat; image-rendering: pixelated;
+  #coin { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; color: #ffd60a; text-decoration: none; font-size: 9px;
+    border: 3px solid #ffd60a; padding: 4px 10px 4px 6px; background: #000; box-shadow: 3px 3px 0 #6b5400; }   /* 153 × 38, the height of a .btn */
+  /* a pixel coin, drawn in code (coinSpriteCell below): six frames of spin, 12-px art at 2× (24 px); it stands still under reduced motion */
+  .coin { display: inline-block; width: 24px; height: 24px; background: var(--coin) 0 0 / 144px 24px no-repeat; image-rendering: pixelated;
     animation: coinSpin .72s steps(6, end) infinite; }
-  @keyframes coinSpin { to { background-position: -192px 0; } }
+  @keyframes coinSpin { to { background-position: -144px 0; } }
   #coin:hover { background: #ffd60a; color: #000; }
   #coin .c { animation: blinkTxt 1.2s steps(2, start) infinite; }
+  @media (prefers-reduced-motion: reduce) { #msg #coin .c { animation: none; } }   /* the line above outranks :112's #coin .c (same specificity, later) */
   #about { display: block; width: max-content; margin: 14px auto 0; color: var(--dim); font-size: 8px; text-decoration: none; }
   #about:hover { color: #fff; }
   /* keyboard menus: the inverted row is the focus state (hover looks the same) */
@@ -236,6 +237,30 @@
   .sl i.on { background: #ffd60a; }
   body.touch .sl i { width: 12px; height: 18px; }
   body.touch .arow .btn { display: none; }        /* on touch the bar itself is the control; the row then fits a 344 fold */
+  /* SHARE, on every final GAME OVER stage before INSERT COIN: a centred label line, then a row of square .btn icons
+     (inverted on focus / hover / press as any .btn). The label is the tooltip: SHARE, the name of the icon under the
+     cursor, or what a press did. */
+  .share { margin-top: 14px; }
+  #msg .share .lab { margin: 0; color: var(--dim); font-size: 9px; line-height: 1.6; white-space: nowrap; }
+  #msg .share .lab.on   { color: var(--ink); }
+  #msg .share .lab.ok   { color: #38e07b; }
+  #msg .share .lab.fail { color: #ff4d6d; }
+  .share .row { display: flex; flex-wrap: wrap; justify-content: center; }
+  .share .btn.ico { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+    width: 38px; height: 38px; padding: 4px; margin: 6px 3px 0; }                 /* 3 + 4 + 24 + 4 + 3; a 44 px step */
+  .share .btn.ico svg { display: block; }   /* brand fills are in the svg (ICON_FILL); COPY, X, MORE are currentColor */
+  .share .btn.ico.ok svg path, .share .btn.ico.fail svg path { fill: currentColor; } /* a result repaints the whole glyph, brand fills too */
+  .share .btn.ico.ok   { border-color: #38e07b; color: #38e07b; }
+  .share .btn.ico.fail { border-color: #ff4d6d; color: #ff4d6d; }
+  #msg .share .btn.ok.focus, .share .btn.ok:hover, .share .btn.ok:active { background: #38e07b; color: #000; }
+  #msg .share .btn.fail.focus, .share .btn.fail:hover, .share .btn.fail:active { background: #ff4d6d; color: #000; }
+  .share .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* a thumb: 38 px looks, 44 × 44 hits (inset from the padding box); neighbours are 6 px apart, so the areas meet, never overlap */
+  body.touch #msg .share .btn::after { content: ""; position: absolute; inset: -6px; }
+  @media (max-width: 370px) {                     /* 360-wide Androids: a 42 px step, so seven fit the 297 px inner panel */
+    .share .btn.ico { margin: 6px 2px 0; }
+    body.touch #msg .share .btn::after { inset: -6px -5px; }
+  }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 <script>setTimeout(() => { if (!window.__booted) document.body.insertAdjacentHTML('beforeend', '<div id="bootfail" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;color:#ff4d6d;text-align:center;line-height:2">THE GAME DIDN\'T LOAD.<br>REFRESH TO TRY AGAIN.</div>'); }, 8000);</script>
@@ -314,7 +339,8 @@ function reset() {
   bags = [[], [], [], []];
   lastDrop = [0, 0, 0, 0];
   active = 0; score = 0; lines = 0; live = false; paused = false; over = false; flash = ''; newHi = false;
-  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; menu = null; streak = []; cubes = 0; renderOverlay();
+  locks = 0; rankedLive = false; runStart = performance.now(); ov = null; armed = false; menu = null; streak = []; cubes = 0;
+  shareMsg = null; sharePending = false; clearTimeout(shareTimer); renderOverlay();
   for (let f = 0; f < 4; f++) spawn(f);
   setActive(0, true);
   sfx.sync();
@@ -533,10 +559,11 @@ const navIdx = (items = navItems()) => Math.max(0, Math.min(items.length - 1, na
 let kbdSeen = false;                           // a touch device shows the cursor once a key has moved it
 function applyNav() {
   const items = navItems();
-  if (!items.length || (document.body.classList.contains('touch') && !kbdSeen)) return;
+  if (!items.length || (document.body.classList.contains('touch') && !kbdSeen)) { paintShare(null); return; }
   const i = navIdx(items);
   navPos[scr()] = i;
   items.forEach((el, k) => el.classList.toggle('focus', k === i));
+  paintShare(items[i]);                        // the SHARE label names the icon under the cursor
 }
 function moveNav(d) {
   const items = navItems(); if (!items.length) return;
@@ -556,6 +583,12 @@ function navKey(e, k) {
   const el = items[navIdx(items)];
   if ((k === 'ArrowLeft' || k === 'ArrowRight') && el.dataset.k) { e.preventDefault(); kbdSeen = true; sfx.set(el.dataset.k, audio[el.dataset.k] + (k === 'ArrowRight' ? 1 : -1)); return true; }
   if ((k === 'ArrowLeft' || k === 'ArrowRight') && menu === 'tutorial') { e.preventDefault(); tutStep(k === 'ArrowRight' ? 1 : -1); return true; }
+  if ((k === 'ArrowLeft' || k === 'ArrowRight') && el.closest('.share')) {   // ←/→ move inside the SHARE row and wrap there
+    e.preventDefault(); kbdSeen = true;
+    const row = items.filter(x => x.closest('.share')), j = row.indexOf(el);
+    navPos[scr()] = items.indexOf(row[(j + (k === 'ArrowRight' ? 1 : -1) + row.length) % row.length]);
+    applyNav(); sfx.move(); if (trap) trap(); return true;
+  }
   if (k === 'Enter' || k === ' ') {
     e.preventDefault();
     if (over && performance.now() - overAt < 700) return true;
@@ -666,7 +699,7 @@ if (matchMedia('(pointer: coarse)').matches) {
 addEventListener('click', e => {
   if (e.target === net) return;               // the net picks faces on pointerup, below
   if (e.target instanceof Element && e.target.closest('#coin')) sfx.coin();
-  if (trap && e.detail > 0 && e.target instanceof Element && e.target.closest('#msg a')) { trap(); return; }   // links open a new tab
+  if (trap && e.detail > 0 && e.target instanceof Element && e.target.closest('#msg a:not([data-act])')) { trap(); return; }   // links open a new tab (Instagram's also copies, below)
   const b = e.target instanceof Element && e.target.closest('[data-act]'); if (!b) return;
   sfx.init();
   const act = b.dataset.act, i = +b.dataset.i;
@@ -724,6 +757,8 @@ function onAct(act, i, b) {
   else if (act === 'vol') sfx.set(b.dataset.k, audio[b.dataset.k] + +b.dataset.d);
   else if (act === 'mute') { sfx.toggle(); renderOverlay(); }
   else if (act === 'boards') toggleBoards();
+  else if (act === 'share' && over) shareSheet(b.dataset.share);
+  else if ((act === 'copy' || act === 'ig') && over) shareCopy(b.dataset.share, act === 'ig' ? 'ig' : 'copied');   // Instagram is a link: it opens as well
   else if (ov?.stage === 'entry') {
     if (act === 'up' || act === 'down') {
       ov.cursor = i;
@@ -1427,24 +1462,246 @@ function audioHtml() {
 }
 // INSERT COIN: the pause menu's Buy Me a Coffee link, with the coin
 const coinHtml = () => COFFEE_URL.startsWith('#') ? '' : `<a id="coin" data-nav href="${COFFEE_URL}" target="_blank" rel="noopener"><i class="coin"></i><span class="c">INSERT COIN</span></a>`;
-// The coin sprite: six 16-px frames of a spinning gold coin, drawn as rects and handed to CSS as a data URI.
-// Frame widths 12 · 8 · 4 · 2 · 4 · 8; each row is an outline run, a body run and a highlight pixel.
-function coinSprite() {
-  const H = 14, Y0 = 1, frames = [12, 8, 4, 2, 4, 8], rects = [];
+// The coin sprite: six frames of a spinning gold coin on a C-px cell, drawn as rects and handed to CSS as a data URI.
+// Each row is an outline run, a body run, the glint (top left) and the stamped bar on the face. The game draws the
+// 12-px cell at 2× (24 px); the 16-px cell is the 32-px coin shipped before 2026-10-10, kept so the port stays checkable.
+const COIN_CELLS = {
+  16: { H: 14, frames: [12, 8, 4, 2, 4, 8], glint: [2, 4], bar: [4, 9], barMin: 8 },
+  12: { H: 11, frames: [9, 6, 4, 2, 4, 6], glint: [2, 3], bar: [3, 7], barMin: 6 },
+};
+function coinSpriteCell(C) {
+  const { H, frames, glint, bar, barMin } = COIN_CELLS[C], Y0 = 1, rects = [];
   frames.forEach((w, f) => {
-    const cx = f * 16 + 8;
+    const cx = f * C + C / 2;
     for (let r = 0; r < H; r++) {
       const t = (r + 0.5) / H * 2 - 1, hw = Math.max(1, Math.round(w / 2 * Math.sqrt(Math.max(0, 1 - t * t)) * 1.08));
       const x0 = cx - hw, y = Y0 + r, run = 2 * hw;
       rects.push(`<rect x="${x0}" y="${y}" width="${run}" height="1" fill="#b8860b"/>`);
       if (run > 2) rects.push(`<rect x="${x0 + 1}" y="${y}" width="${run - 2}" height="1" fill="#ffd60a"/>`);
-      if (run > 4 && r >= 2 && r <= 4) rects.push(`<rect x="${x0 + 1}" y="${y}" width="${Math.min(2, run - 2)}" height="1" fill="#fff6b0"/>`);   // the glint, top left
-      if (w >= 8 && r >= 4 && r <= 9) rects.push(`<rect x="${cx - 1}" y="${y}" width="2" height="1" fill="#d99a00"/>`);                            // the stamped bar on the face
+      if (run > 4 && r >= glint[0] && r <= glint[1]) rects.push(`<rect x="${x0 + 1}" y="${y}" width="${Math.min(2, run - 2)}" height="1" fill="#fff6b0"/>`);
+      if (w >= barMin && r >= bar[0] && r <= bar[1]) rects.push(`<rect x="${cx - 1}" y="${y}" width="2" height="1" fill="#d99a00"/>`);
     }
   });
-  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 16" shape-rendering="crispEdges">${rects.join('')}</svg>`)}")`;
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${6 * C} ${C}" shape-rendering="crispEdges">${rects.join('')}</svg>`)}")`;
 }
-document.documentElement.style.setProperty('--coin', coinSprite());
+document.documentElement.style.setProperty('--coin', coinSpriteCell(12));
+
+// ── SHARE ────────────────────────────────────────────────────────────────────
+// The icons, drawn in code like the coin: 12 × 12 art drawn at 2× (24 px), the coin's cell and scale.
+// '#' is ink; '.' is empty; 'o' is a second colour inside a mark (Facebook's white f), empty in a one-colour drawing.
+// Bluesky, Facebook, Instagram and LinkedIn are in their own brand colours (ICON_FILL); COPY, X and MORE have no
+// colour of their own and stay currentColor, so they follow the .btn colours (white, black on the inverted fill).
+const ICON_ROWS = {
+  copy: [   // two sheets: the universal copy mark
+    '............',
+    '....#######.',
+    '....#.....#.',
+    '....#.....#.',
+    '.#######..#.',
+    '.#.....#..#.',
+    '.#.....#..#.',
+    '.#.....####.',
+    '.#.....#....',
+    '.#.....#....',
+    '.#######....',
+    '............'],
+  x: [      // X's mark: the hollow \ stroke (walls 1 px, a 2-px slit) crossed by a thin /, which the \ interrupts
+    '####.......#',
+    '.#..#.....#.',
+    '.#..#....#..',
+    '..#..#..#...',
+    '...#..##....',
+    '....#..#....',
+    '....#..#....',
+    '....##..#...',
+    '...#..#..#..',
+    '..#....#..#.',
+    '.#.....#..#.',
+    '#.......####'],
+  bsky: [   // Bluesky's butterfly: wide upper wings to the top corners, a notch for the body, two smaller lower wings
+    '............',
+    '##........##',
+    '###......###',
+    '####....####',
+    '#####..#####',
+    '.##########.',
+    '..########..',
+    '..###..###..',
+    '.####..####.',
+    '.###....###.',
+    '..#......#..',
+    '............'],
+  fb: [     // Facebook's 2023 mark: a filled circle, the f ('o') in it, its stem running out of the bottom edge
+    '....####....',
+    '..########..',
+    '.######ooo#.',
+    '.#####oo###.',
+    '######oo####',
+    '####oooooo##',
+    '######oo####',
+    '######oo####',
+    '.#####oo###.',
+    '.#####oo###.',
+    '..####oo##..',
+    '....##oo....'],
+  ig: [     // Instagram's glyph: a rounded square, a circle, the dot top right
+    '.##########.',
+    '#..........#',
+    '#........#.#',
+    '#...####...#',
+    '#..#....#..#',
+    '#..#....#..#',
+    '#..#....#..#',
+    '#..#....#..#',
+    '#...####...#',
+    '#..........#',
+    '#..........#',
+    '.##########.'],
+  in: [     // LinkedIn's bug: a rounded square with "in" knocked out
+    '.##########.',
+    '############',
+    '##..########',
+    '##..########',
+    '############',
+    '##..#....###',
+    '##..#..#..##',
+    '##..#..#..##',
+    '##..#..#..##',
+    '##..#..#..##',
+    '############',
+    '.##########.'],
+  more: [   // three dots: more ways to share (the phone's own sheet)
+    '............',
+    '............',
+    '............',
+    '............',
+    '............',
+    '.##..##..##.',
+    '.##..##..##.',
+    '............',
+    '............',
+    '............',
+    '............',
+    '............'],
+};
+// Brand colours, each from the brand's own kit or brand page (DES round-2 return §7, 2026-10-10). One hex fills the
+// whole glyph; Instagram's official gradient glyph is artwork with no published stops, so each lit pixel carries the
+// colour measured from it. All clear 3:1 on the black button (lowest: Instagram's violet corner, 3.50); Instagram's
+// yellow base does not on the white focus fill (1.64-2.98), as in Instagram's own gradient-on-white glyph.
+const ICON_FILL = {
+  bsky: '#0560ff',   // "Blue, primary brand color", bsky.social/about/support/branding
+  fb:   { '#': '#0866ff', o: '#ffffff' },   // Facebook Blue with a white f (Meta: never a transparent f); Facebook_Logo_Primary.png
+  in:   '#2867b2',   // LinkedIn Blue, measured from LI-In-Bug.png in LinkedIn's in-logo.zip (brand.linkedin.com)
+  ig: [   // sampled from Instagram_Glyph_Gradient.svg (IG brand asset pack 2023)
+    '...... 8223f4 9324ec a725de bb28d1 ca2bcc d42dce d92fd1 dc2fd2 dd30cf de30c7 ......',
+    '9029f5 ...... ...... ...... ...... ...... ...... ...... ...... ...... ...... e833af',
+    'b02eed ...... ...... ...... ...... ...... ...... ...... ...... ea33b3 ...... ea339d',
+    'cc34d4 ...... ...... ...... ea369d ea35a1 ea34a7 ea33ab ...... ...... ...... ea338a',
+    'de3aa4 ...... ...... ea3a82 ...... ...... ...... ...... ea339a ...... ...... ea3379',
+    'e7406b ...... ...... ea4166 ...... ...... ...... ...... ea3589 ...... ...... ea336c',
+    'ea4a48 ...... ...... eb4d52 ...... ...... ...... ...... ea3876 ...... ...... ea3363',
+    'ea5835 ...... ...... ec5e42 ...... ...... ...... ...... ea3f62 ...... ...... ea335d',
+    'ec6b2e ...... ...... ...... ed7140 ec6a47 ec604d eb564f ...... ...... ...... e8365a',
+    'ee8131 ...... ...... ...... ...... ...... ...... ...... ...... ...... ...... e73a59',
+    'f09737 ...... ...... ...... ...... ...... ...... ...... ...... ...... ...... e74257',
+    '...... f4b83f f5c042 f5c343 f5c242 f5bc41 f3b13f f19e3b ef8638 ec6d38 ea5940 ......'],
+};
+function iconPath(rows, ch = '#') {
+  const d = [], run = new RegExp(`${ch}+`, 'g');
+  rows.forEach((row, y) => { for (const m of row.matchAll(run)) d.push(`M${m.index} ${y}h${m[0].length}v1h-${m[0].length}z`); });
+  return d.join('');
+}
+function iconSvg(k) {
+  const f = ICON_FILL[k], rows = ICON_ROWS[k];
+  let paths;
+  if (!f || typeof f === 'string') paths = `<path fill="${f || 'currentColor'}" d="${iconPath(rows)}"/>`;
+  else if (!Array.isArray(f)) paths = Object.entries(f).map(([ch, c]) => `<path fill="${c}" d="${iconPath(rows, ch)}"/>`).join('');   // one colour per character
+  else {                                   // per-pixel colour: one path per colour
+    const by = {};
+    rows.forEach((row, y) => [...row].forEach((c, x) => { if (c === '#') (by['#' + f[y].split(' ')[x]] ||= []).push(`M${x} ${y}h1v1h-1z`); }));
+    paths = Object.entries(by).map(([c, d]) => `<path fill="${c}" d="${d.join('')}"/>`).join('');
+  }
+  return `<svg viewBox="0 0 12 12" width="24" height="24" shape-rendering="crispEdges" aria-hidden="true" focusable="false">${paths}</svg>`;
+}
+// The copy and the link. GoatCounter takes ?ref= as the referrer, so share arrivals count as "share".
+const SHARE_URL = 'https://tetracube.fun/?ref=share';
+function shareText(r) {
+  if (r.score <= 0) return 'I scored 000000 on Tetracube 🧊 The cube won.';
+  let t = `I scored ${pad(r.score, 6)} on Tetracube`;
+  if (r.mode === 'live' && !r.rank) t += ' in Live mode';
+  if (r.built) t += ' and built a TETRACUBE';
+  t += ' 🧊';
+  if (r.rank) t += ` #${r.rank} on the ${r.mode === 'live' ? 'Live' : 'Focus'} top 10.`;
+  return t;
+}
+const enc = encodeURIComponent;
+const clipText = t => `${t}\n${SHARE_URL}`;
+// The OS share sheet only on a touch device that has one: desktop Safari and Chrome on Windows have navigator.share too,
+// and there the row is the better answer.
+const nativeShare = () => document.body.classList.contains('touch') && typeof navigator.share === 'function';
+// name: the label line while the cursor is on it. aria: what a screen reader hears. Facebook and LinkedIn take a link
+// only and build the card from the page's OG tags. Instagram has no web share URL: with a sheet it opens the sheet,
+// without one it copies the text and opens instagram.com, and says so.
+function shareTargets(t) {
+  const sheet = nativeShare(), NEW = ' (opens in a new tab)';
+  return [
+    { k: 'copy', act: 'copy', name: 'COPY TEXT + LINK', aria: 'Copy your score and the link' },
+    { k: 'x',    href: `https://x.com/intent/post?text=${enc(t)}&url=${enc(SHARE_URL)}`, name: 'POST ON X ↗', aria: 'Post on X' + NEW },
+    { k: 'bsky', href: `https://bsky.app/intent/compose?text=${enc(t + ' ' + SHARE_URL)}`, name: 'POST ON BLUESKY ↗', aria: 'Post on Bluesky' + NEW },
+    { k: 'fb',   href: `https://www.facebook.com/sharer/sharer.php?u=${enc(SHARE_URL)}`, name: 'SHARE ON FACEBOOK ↗', aria: 'Share on Facebook' + NEW },
+    sheet ? { k: 'ig', act: 'share', name: 'SHARE TO INSTAGRAM', aria: 'Share to Instagram, from the share sheet' }
+          : { k: 'ig', act: 'ig', href: 'https://www.instagram.com/', name: 'COPY FOR INSTAGRAM ↗', aria: 'Copy your score for Instagram, and open Instagram' + NEW },
+    { k: 'in',   href: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(SHARE_URL)}`, name: 'SHARE ON LINKEDIN ↗', aria: 'Share on LinkedIn' + NEW },
+    ...(sheet ? [{ k: 'more', act: 'share', name: 'MORE WAYS TO SHARE', aria: 'More ways to share, from the share sheet' }] : []),
+  ];
+}
+const shareRun = () => ({ score, mode: (ov ?? { mode: runMode() }).mode, rank: ov?.rank, built: cubes > 0 });   // built: this run, not o.cube (cleared on save)
+function shareHtml() {
+  const btn = x => x.href
+    ? `<a class="btn ico" data-nav data-share="${x.k}"${x.act ? ` data-act="${x.act}"` : ''} href="${esc(x.href)}" target="_blank" rel="noopener" aria-label="${esc(x.aria)}">${iconSvg(x.k)}</a>`
+    : `<button class="btn ico" data-nav data-share="${x.k}" data-act="${x.act}" aria-label="${esc(x.aria)}">${iconSvg(x.k)}</button>`;
+  return `<div class="share"><p class="lab" aria-hidden="true">SHARE</p><div class="row">${shareTargets(shareText(shareRun())).map(btn).join('')}</div><span class="sr" role="status"></span></div>`;
+}
+// A press's result: { on: the icon, kind } for 2 s, painted in place so a scrolled panel and real focus stay put.
+// A press inside the 2 s restarts it and toggles nothing, so no press rate can make it flash.
+const SHARE_RESULT = { copied: ['COPIED!', 'ok'], ig: ['COPIED · PASTE IN INSTAGRAM', 'ok'], failed: ["COULDN'T COPY", 'fail'] };
+let shareMsg = null, shareTimer = 0, sharePending = false;
+function paintShare(cursorEl) {
+  const box = msg.querySelector('.share'); if (!box) return;
+  const res = shareMsg && SHARE_RESULT[shareMsg.kind], lab = box.querySelector('.lab');
+  box.querySelectorAll('[data-share]').forEach(b => {
+    const on = !!res && b.dataset.share === shareMsg.on;
+    b.classList.toggle('ok', on && res[1] === 'ok'); b.classList.toggle('fail', on && res[1] === 'fail');
+  });
+  const k = cursorEl?.closest('.share') && cursorEl.dataset.share, named = k && shareTargets('').find(x => x.k === k);
+  lab.className = 'lab' + (res ? ' ' + res[1] : named ? ' on' : '');
+  lab.textContent = res ? res[0] : named ? named.name : 'SHARE';
+  const sr = box.querySelector('.sr'), said = res ? res[0].replace('!', '') : '';
+  if (sr.textContent !== said) sr.textContent = said;
+}
+function shareFlash(on, kind) { shareMsg = { on, kind }; applyNav(); armShare(); }
+function armShare() {                         // 2 s from when the player can see it: a press that opened a tab holds until this one is back
+  clearTimeout(shareTimer); sharePending = document.hidden;
+  if (!sharePending) shareTimer = setTimeout(() => { shareMsg = null; applyNav(); }, 2000);
+}
+document.addEventListener('visibilitychange', () => {   // the new tab can take the foreground after the copy resolved: hold, then 2 s from the return
+  if (!shareMsg) return;
+  if (document.hidden) { clearTimeout(shareTimer); sharePending = true; } else if (sharePending) armShare();
+});
+async function shareCopy(on, kind = 'copied') {
+  const text = clipText(shareText(shareRun()));
+  try { await navigator.clipboard.writeText(text); return shareFlash(on, kind); } catch {}
+  const ta = Object.assign(document.createElement('textarea'), { value: text });   // the old way: an off-screen field, selected, copied, gone
+  ta.style.cssText = 'position:fixed;left:-9999px;user-select:text;-webkit-user-select:text';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch {}
+  ta.remove(); if (trap) trap();
+  shareFlash(on, ok ? kind : 'failed');
+}
+async function shareSheet(on) {               // first thing in the tap, no await before it, so iOS still sees the user's gesture
+  try { await navigator.share({ text: shareText(shareRun()), url: SHARE_URL }); }
+  catch (e) { if (e?.name !== 'AbortError') shareCopy(on); }   // a cancelled sheet changes nothing
+}
 // The tutorial: three pages. The corner picture is two flat faces that share a column.
 function cubePic() {
   const C = 16, rows = 5, cell = (c, r, fill, stroke = '#2a3342') => `<rect x="${c * C}" y="${12 + r * C}" width="${C - 1}" height="${C - 1}" fill="${fill}" stroke="${stroke}"/>`;
@@ -1536,10 +1793,10 @@ function drawOverlay() {
     `<p id="nerr" style="color:#ff4d6d">${o.err || ''}</p>` +
     `<div class="btns"><button class="btn go" data-act="nsave">SAVE</button><button class="btn" data-act="nskip">SKIP</button></div>` +
     `<p class="hint kbd">TYPE OR &uarr;&darr; &nbsp; &larr;&rarr; MOVE &nbsp; ENTER TO SAVE &nbsp; ESC TO SKIP</p>`;
-  else if (o.stage === 'offline') body = hof + `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>` + coinHtml();
-  else if (!o.board) body = hof + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>` + coinHtml();
+  else if (o.stage === 'offline') body = hof + `<p style="color:#ff4d6d;margin-top:14px">${o.err || 'SCOREBOARD OFFLINE'}</p><div class="btns">${AGAIN}</div>` + shareHtml() + coinHtml();
+  else if (!o.board) body = hof + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>` + shareHtml() + coinHtml();
   else body = hof + `<p class="bt" style="margin-top:14px;color:${o.mode === 'live' ? '#ff4d6d' : '#38e07b'}">${o.mode.toUpperCase()} TOP 10${o.rank ? ` · YOU'RE #${o.rank}` : ''}</p>` +
-    (o.board ? boardHtml(o.board, o.mine) : '') + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>` + coinHtml();
+    (o.board ? boardHtml(o.board, o.mine) : '') + `<div class="btns">${AGAIN}${LB}</div><p class="hint kbd">OR PRESS R</p>` + shareHtml() + coinHtml();
   msg.innerHTML = `<div class="panel">${head}${body}</div>`;
 }
 
@@ -1600,7 +1857,11 @@ if (['127.0.0.1', 'localhost'].includes(location.hostname))
     get paused() { return paused; }, get over() { return over; }, get armed() { return armed; }, get menu() { return menu; },
     get tutPage() { return tutPage; }, get tutFirst() { return tutFirst; }, escape, get ov() { return ov; },
     get audio() { return sfx.probe(); },
-    get nav() { const it = navItems(); return { screen: scr(), idx: navIdx(it), items: it.map(e => e.textContent.trim().slice(0, 18)), focused: it[navIdx(it)]?.textContent.trim().slice(0, 18) ?? null, cursorOn: it.findIndex(e => e.classList.contains('focus')) }; },
+    get nav() { const name = e => (e.textContent.trim() || e.dataset.share || '').slice(0, 18);   // the share icons have no text: their key
+      const it = navItems(); return { screen: scr(), idx: navIdx(it), items: it.map(name), focused: it[navIdx(it)] ? name(it[navIdx(it)]) : null, cursorOn: it.findIndex(e => e.classList.contains('focus')) }; },
+    get share() { const b = msg.querySelector('.share'); return b && { label: b.querySelector('.lab').textContent, status: b.querySelector('.sr').textContent, msg: shareMsg,
+      text: shareText(shareRun()), hrefs: Object.fromEntries([...b.querySelectorAll('a[data-share]')].map(a => [a.dataset.share, a.href])) }; },
+    coinSpriteCell,
     // fill the empty cells of face f's bottom n rows and clear: rows(f, 4) is a TETRA on f, rows(f, 1..3) breaks the streak
     rows(f, n) { for (let r = 0; r < n; r++) for (let j = 0; j < W; j++) grid[ringCol(f, j)][r] ??= 'I'; clearRows(); return [...streak]; },
     tetra(f) { return this.rows(f, 4); } };
